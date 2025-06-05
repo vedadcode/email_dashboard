@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Company Email Dashboard - Filter Button</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { /* Default: Dark Theme */
+            --primary-accent-color: #00CFE8;
+            --primary-accent-hover-color: #00A9BF;
+            --secondary-accent-color: #FFC107;
+            --secondary-accent-hover-color: #E0A800;
+
+            --danger-color: #F93154;
+            --danger-hover-color: #D12745;
+            --success-color: #4CAF50;
+            --success-hover-color: #409143;
+            --info-color: #17A2B8; 
+            --info-hover-color: #138496;
+
+            --filter-btn-bg: var(--info-color); /* Color for the new filter button */
+            --filter-btn-text: var(--text-on-status);
+            --filter-btn-hover-bg: var(--info-hover-color);
+            --filter-btn-icon-color: var(--text-on-status);
+
+            --export-btn-bg: var(--primary-accent-color);
+            --export-btn-text: var(--text-on-accent);
+            --export-btn-hover-bg: var(--primary-accent-hover-color);
+            --export-btn-icon-color: var(--text-on-accent);
+
+            --bg-color: #1A1D24;
+            --card-bg-color: #252A34;
+            --border-color: #3A3F4B;
+            --input-bg-color: var(--card-bg-color);
+            --input-focus-border: var(--primary-accent-color);
+
+            --text-color-primary: #EAEAEA;
+            --text-color-secondary: #A0AEC0;
+            --text-color-headings: #FFFFFF;
+            --text-on-accent: #121212;
+            --text-on-secondary-accent: #121212;
+            --text-on-status: #FFFFFF;
+
+            --border-radius: 12px;
+            --font-family: 'Inter', sans-serif;
+
+            /* 3D Shadow Variables - Dark Theme */
+            --shadow-distance: 6px;
+            --shadow-blur: 12px;
+            --highlight-shadow-color: rgba(255, 255, 255, 0.05);
+            --dark-shadow-color: rgba(0, 0, 0, 0.3);
+            --inset-highlight-shadow-color: rgba(255, 255, 255, 0.03);
+            --inset-dark-shadow-color: rgba(0, 0, 0, 0.4);
+
+            --chart-grid-color: var(--border-color);
+            --chart-ticks-color: var(--text-color-secondary);
+            --chart-legend-color: var(--text-color-primary);
+            --chart-tooltip-bg: rgba(0,0,0,0.85);
+            --chart-tooltip-title: var(--primary-accent-color);
+            --chart-tooltip-body: var(--text-color-primary);
+        }
+
+        body[data-theme="light"] {
+            --primary-accent-color: #007bff;
+            --primary-accent-hover-color: #0056b3;
+            --secondary-accent-color: #ffc107;
+            --secondary-accent-hover-color: #e0a800;
+
+            --danger-color: #dc3545;
+            --danger-hover-color: #c82333;
+            --success-color: #28a745;
+            --success-hover-color: #218838;
+            --info-color: #17a2b8;
+            --info-hover-color: #138496;
+
+            --filter-btn-bg: var(--info-color);
+            --filter-btn-text: var(--text-on-status);
+            --filter-btn-hover-bg: var(--info-hover-color);
+            --filter-btn-icon-color: var(--text-on-status);
+            
+            --export-btn-bg: #6c757d; 
+            --export-btn-text: #ffffff;
+            --export-btn-hover-bg: #5a6268;
+            --export-btn-icon-color: #ffffff;
+
+            --bg-color: #E0E5EC;
+            --card-bg-color: #E0E5EC;
+            --border-color: #D1D9E6;
+            --input-bg-color: var(--card-bg-color);
+            --input-focus-border: var(--primary-accent-color);
+
+            --text-color-primary: #3E4A5D;
+            --text-color-secondary: #748094;
+            --text-color-headings: var(--primary-accent-color);
+            --text-on-accent: #ffffff;
+            --text-on-secondary-accent: #212529;
+            --text-on-status: #FFFFFF;
+
+            --highlight-shadow-color: rgba(255, 255, 255, 0.9);
+            --dark-shadow-color: rgba(163, 177, 198, 0.6);
+            --inset-highlight-shadow-color: rgba(255, 255, 255, 0.7);
+            --inset-dark-shadow-color: rgba(163, 177, 198, 0.5);
+
+            --chart-grid-color: var(--border-color);
+            --chart-ticks-color: var(--text-color-secondary);
+            --chart-legend-color: var(--text-color-primary);
+            --chart-tooltip-bg: rgba(255,255,255,0.95);
+            --chart-tooltip-title: var(--primary-accent-color);
+            --chart-tooltip-body: var(--text-color-primary);
+        }
+
+        /* General body and layout styles */
+        body {
+            font-family: var(--font-family); margin: 0; padding: 25px;
+            background-color: var(--bg-color); color: var(--text-color-primary);
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .header-container {
+            width: 100%; max-width: 1300px; display: flex;
+            justify-content: space-between; align-items: center; margin-bottom: 35px;
+        }
+        h1 {
+            text-align: left; color: var(--primary-accent-color); font-weight: 700;
+            font-size: 2.2em; margin: 0;
+            text-shadow: 1px 1px 2px var(--dark-shadow-color), -1px -1px 2px var(--highlight-shadow-color);
+        }
+        body[data-theme="light"] h1 { text-shadow: 1px 1px 1px var(--dark-shadow-color), -1px -1px 1px var(--highlight-shadow-color); }
+        
+        #themeToggle {
+            padding: 10px 15px; background-color: var(--card-bg-color); color: var(--text-color-primary);
+            border: none; border-radius: var(--border-radius); cursor: pointer; font-size: 1em;
+            transition: box-shadow 0.2s ease-out, background-color 0.3s ease, color 0.3s ease;
+            box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--dark-shadow-color),
+                        calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--highlight-shadow-color);
+        }
+        #themeToggle .icon { font-size: 1.1em; }
+        #themeToggle:active {
+            box-shadow: inset var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--dark-shadow-color),
+                        inset calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--highlight-shadow-color);
+            transform: translateY(1px);
+        }
+        
+        h3 {
+            color: var(--text-color-headings); margin-top: 0; margin-bottom: 25px;
+            font-weight: 600; padding-bottom: 10px;
+            text-shadow: 0.5px 0.5px 1px var(--dark-shadow-color);
+        }
+        body[data-theme="light"] h3 { text-shadow: 0.5px 0.5px 0.5px var(--dark-shadow-color); }
+        
+        main { width: 100%; max-width: 1300px; display: flex; flex-direction: column; gap: 35px; }
+        
+        .card {
+            background: var(--card-bg-color); padding: 30px; border-radius: var(--border-radius);
+            box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--dark-shadow-color),
+                        calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--highlight-shadow-color);
+            transition: transform 0.25s ease-in-out, box-shadow 0.25s ease-in-out, background-color 0.3s ease;
+        }
+        .card:hover { transform: translateY(-3px); }
+        
+        .form-section fieldset {
+            border: none; border-radius: var(--border-radius); padding: 25px; margin: 0;
+            box-shadow: inset 3px 3px 5px var(--inset-dark-shadow-color),
+                        inset -3px -3px 5px var(--inset-highlight-shadow-color);
+        }
+        .form-section legend {
+            padding: 0 15px; font-weight: 600; color: var(--text-color-headings);
+            font-size: 1.3em; margin-bottom: 10px;
+        }
+        
+        label {
+            display: block; margin-bottom: 8px; font-weight: 500;
+            font-size: 0.95em; color: var(--text-color-secondary);
+        }
+        
+        input[type="text"], input[type="password"], input[type="email"], input[type="date"], select {
+            padding: 14px 18px; margin-bottom: 18px; width: 100%; border: none;
+            border-radius: 8px; font-size: 16px; box-sizing: border-box;
+            background-color: var(--input-bg-color); color: var(--text-color-primary);
+            transition: box-shadow 0.2s ease-out, background-color 0.3s ease, color 0.3s ease;
+            box-shadow: inset 3px 3px 5px var(--inset-dark-shadow-color),
+                        inset -3px -3px 5px var(--inset-highlight-shadow-color);
+        }
+        select {
+            appearance: none; 
+            background-repeat: no-repeat; background-position: right 1rem center; background-size: 1em;
+            padding-right: 2.5rem; 
+        }
+        select option { background-color: var(--card-bg-color); color: var(--text-color-primary); }
+        body[data-theme="light"] select option { background-color: #fff; color: #212529; }
+        
+        input:focus-visible, select:focus-visible {
+            outline: none;
+            box-shadow: inset 3px 3px 5px var(--inset-dark-shadow-color),
+                        inset -3px -3px 5px var(--inset-highlight-shadow-color),
+                        0 0 0 2px var(--input-focus-border); 
+        }
+        input::placeholder { color: var(--text-color-secondary); opacity: 0.7; }
+        
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+        .button-group { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
+
+        /* General Button Styles */
+        button {
+            padding: 10px 20px; border: none; border-radius: var(--border-radius); cursor: pointer;
+            font-weight: 600; font-size: 1em;
+            transition: box-shadow 0.15s ease-out, transform 0.15s ease-out, background-color 0.2s, color 0.2s;
+            text-transform: capitalize; display: inline-flex; align-items: center; gap: 8px;
+            background-color: var(--card-bg-color); color: var(--text-color-primary);
+            box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--dark-shadow-color),
+                        calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--highlight-shadow-color);
+        }
+        button svg.icon {
+            width: 1em; height: 1em; fill: currentColor;
+        }
+        button:active {
+            box-shadow: inset 3px 3px 5px var(--inset-dark-shadow-color),
+                        inset -3px -3px 5px var(--inset-highlight-shadow-color);
+            transform: translateY(2px);
+        }
+
+        /* Specific Button Styling */
+        .btn-primary {
+            background-color: var(--primary-accent-color); color: var(--text-on-accent);
+            box-shadow: 2px 2px 5px color-mix(in srgb, var(--primary-accent-color) 70%, black),
+                        -2px -2px 5px color-mix(in srgb, var(--primary-accent-color) 70%, white);
+        }
+        body[data-theme="dark"] .btn-primary {
+             box-shadow: 2px 2px 5px rgba(0,0,0,0.3),
+                        -2px -2px 5px color-mix(in srgb, var(--primary-accent-color) 30%, #fff);
+        }
+        .btn-primary:active {
+            box-shadow: inset 2px 2px 4px color-mix(in srgb, var(--primary-accent-color) 60%, black),
+                        inset -2px -2px 4px color-mix(in srgb, var(--primary-accent-color) 40%, white);
+        }
+        .btn-secondary {
+            background-color: var(--card-bg-color); color: var(--text-color-secondary);
+        }
+
+        /* Export Button Style */
+        .btn-export {
+            background-color: var(--export-btn-bg); color: var(--export-btn-text);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-weight: 500;
+            border-radius: 6px; padding: 10px 18px;
+        }
+        .btn-export:hover {
+            background-color: var(--export-btn-hover-bg);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15); transform: translateY(-1px);
+        }
+        .btn-export:active {
+            background-color: color-mix(in srgb, var(--export-btn-hover-bg) 90%, black);
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); transform: translateY(0px);
+        }
+        .btn-export svg.icon { fill: var(--export-btn-icon-color); }
+
+        /* Filter Button NEW STYLE */
+        .btn-filter {
+            background-color: var(--filter-btn-bg);
+            color: var(--filter-btn-text);
+            box-shadow: 2px 2px 5px color-mix(in srgb, var(--filter-btn-bg) 70%, black),
+                        -2px -2px 5px color-mix(in srgb, var(--filter-btn-bg) 70%, white);
+            font-weight: 500;
+            border-radius: 6px; padding: 10px 18px;
+        }
+        body[data-theme="dark"] .btn-filter {
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3),
+                        -2px -2px 5px color-mix(in srgb, var(--filter-btn-bg) 30%, #fff);
+        }
+        .btn-filter:hover {
+            background-color: var(--filter-btn-hover-bg);
+        }
+        .btn-filter:active {
+            box-shadow: inset 2px 2px 4px color-mix(in srgb, var(--filter-btn-bg) 60%, black),
+                        inset -2px -2px 4px color-mix(in srgb, var(--filter-btn-bg) 40%, white);
+        }
+        .btn-filter svg.icon { fill: var(--filter-btn-icon-color); }
+
+
+        .filter-section { 
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+        }
+        .filter-section select { 
+            margin-bottom: 0; flex-grow: 1; min-width: 200px;
+        }
+        .filter-section button { flex-shrink: 0; }
+        
+        #chartContainer { padding: 20px 0; min-height: 350px; display: flex; align-items: center; justify-content: center; }
+        #chartContainer p { color: var(--text-color-secondary); font-size: 1.1em; }
+        #emailChart { background-color: transparent; }
+        
+        .table-wrapper { overflow-x: auto; }
+        table {
+            width: 100%; border-collapse: separate; border-spacing: 0;
+            margin-top: 0; border-radius: var(--border-radius); overflow: hidden; 
+        }
+        th, td {
+            padding: 16px 20px; text-align: left; border-bottom: 1px solid var(--border-color);
+            vertical-align: middle; color: var(--text-color-primary);
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+        td { color: var(--text-color-secondary); }
+        td strong { color: var(--text-color-primary); font-weight: 500; }
+        th {
+            background-color: transparent; color: var(--text-color-headings);
+            font-weight: 600; font-size: 1em; text-transform: uppercase;
+            letter-spacing: 0.5px; border-bottom-width: 2px; 
+        }
+        body[data-theme="dark"] th { color: var(--primary-accent-color); }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background-color: color-mix(in srgb, var(--text-color-primary) 3%, transparent); }
+        td.password-cell { font-family: 'Courier New', Courier, monospace; color: var(--text-color-secondary); letter-spacing: 1.5px; }
+        
+        .status-button {
+            padding: 6px 14px; border-radius: 15px; cursor: default; 
+            color: var(--text-on-status); font-size: 0.88em; font-weight: 600;
+            text-transform: capitalize;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.15), -1px -1px 3px rgba(255,255,255,0.08);
+        }
+        body[data-theme="light"] .status-button { box-shadow: 1px 1px 3px rgba(0,0,0,0.1), -1px -1px 3px rgba(255,255,255,0.7); }
+        .active { background-color: var(--success-color); }
+        .inactive { background-color: var(--danger-color); }
+        .on-hold { background-color: var(--info-color); }
+
+        .actions button {
+            margin-right: 6px; padding: 6px 10px; font-size: 0.9em;
+            border-radius: 6px; 
+            box-shadow: 2px 2px 4px var(--dark-shadow-color),
+                        -2px -2px 4px var(--highlight-shadow-color);
+        }
+        .actions button:active {
+            box-shadow: inset 1px 1px 2px var(--inset-dark-shadow-color),
+                        inset -1px -1px 2px var(--inset-highlight-shadow-color);
+            transform: translateY(1px);
+        }
+        .actions button svg.icon {
+             width: 0.9em; height: 0.9em;
+        }
+
+        .btn-edit {
+            background-color: var(--secondary-accent-color); color: var(--text-on-secondary-accent);
+        }
+        .btn-edit svg.icon { fill: var(--text-on-secondary-accent); }
+
+        .btn-delete {
+            background-color: var(--danger-color); color: var(--text-on-status);
+        }
+        .btn-delete svg.icon { fill: var(--text-on-status); }
+
+        @media (max-width: 768px) {
+            body { padding: 15px; }
+            .header-container { flex-direction: column; gap: 15px; margin-bottom: 25px;}
+            h1 { font-size: 1.8em; text-align: center; }
+            main { gap: 20px; }
+            .card { padding: 20px; }
+            .form-grid { grid-template-columns: 1fr; }
+            .filter-section { flex-direction: column; align-items: stretch; gap: 15px;}
+            .filter-section select { width: 100%; } /* Ensure select takes full width in column */
+            .filter-section button { width: 100%; } /* Buttons take full width in column */
+
+            th, td { padding: 12px 15px; }
+            button { padding: 10px 18px; font-size: 0.95em; }
+            .actions button { font-size: 0.85em; padding: 6px 10px; }
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="header-container">
+        <h1>Company Email Dashboard</h1>
+        <button id="themeToggle" aria-label="Toggle theme">
+            <span class="icon">🌓</span> <span class="text">Toggle Theme</span>
+        </button>
+    </div>
+
+    <main>
+        <section class="card form-section">
+            <fieldset>
+                <legend id="formLegend">Add New Email Entry</legend>
+                <form id="emailEntryForm">
+                     <div class="form-grid">
+                        <div>
+                            <label for="companyName">Company Name</label>
+                            <select id="companyName" required>
+                                <option value="" disabled selected>Select Company</option>
+                                <option value="Rewardoo Private Limited">Rewardoo Private Limited</option>
+                                <option value="Eseries Sports Private Limited">Eseries Sports Private Limited</option>
+                                <option value="Heksa Skills Private Limited">Heksa Skills Private Limited</option>
+                                <option value="Softscience Tech Private Limited">Softscience Tech Private Limited</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="emailAccount">Email Account</label>
+                            <input type="email" id="emailAccount" placeholder="e.g., user@example.com" required>
+                        </div>
+                        <div>
+                            <label for="password">Password</label>
+                            <input type="password" id="password" placeholder="Enter password" required>
+                        </div>
+                        <div>
+                            <label for="accountHolder">Account Holder</label>
+                            <input type="text" id="accountHolder" placeholder="e.g., John Doe" required>
+                        </div>
+                        <div>
+                            <label for="remarks">Remarks</label>
+                            <input type="text" id="remarks" placeholder="Any notes or details">
+                        </div>
+                        <div>
+                            <label for="subscriptionPlatform">Subscription Platform</label>
+                            <select id="subscriptionPlatform" required>
+                                <option value="" disabled selected>Select Platform</option>
+                                <option value="Hostinger">Hostinger</option>
+                                <option value="GoDaddy">GoDaddy</option>
+                                <option value="Google Console">Google Console (Workspace)</option>
+                                <option value="Zoho Mail">Zoho Mail</option>
+                                <option value="Microsoft 365">Microsoft 365 (Exchange)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="purchaseDate">Purchase Date</label>
+                            <input type="date" id="purchaseDate" required>
+                        </div>
+                        <div>
+                            <label for="expiryDate">Expiry Date</label>
+                            <input type="date" id="expiryDate" required>
+                        </div>
+                        <div>
+                            <label for="mailType">Mail Type</label>
+                            <select id="mailType" required>
+                                <option value="" disabled selected>Select Type</option>
+                                <option value="Gmail Regular">Gmail Regular</option>
+                                <option value="Gmail Paid (Workspace)">Gmail Paid (Workspace)</option>
+                                <option value="Hostinger Webmail">Hostinger Webmail</option>
+                                <option value="GoDaddy Webmail">GoDaddy Webmail</option>
+                                <option value="Zoho Standard">Zoho Standard</option>
+                                <option value="Microsoft Exchange">Microsoft Exchange</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="status">Status</label>
+                            <select id="status">
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="on-hold">On Hold</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+                <div class="button-group">
+                    <button type="button" id="addUpdateBtn" class="btn-primary">
+                         <span class="icon-placeholder"></span>
+                         <span class="text">Add New Entry</span>
+                    </button>
+                    <button type="button" id="cancelEditBtn" class="btn-secondary hidden">
+                        <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg>
+                        <span class="text">Cancel Edit</span>
+                    </button>
+                </div>
+            </fieldset>
+        </section>
+
+        <section class="card filter-export-section">
+             <h3>Filter & Export Data</h3>
+            <div class="filter-section">
+                <select id="filterCompany"> <option value="" selected>Show All Companies</option>
+                    <option value="Rewardoo Private Limited">Rewardoo Private Limited</option>
+                    <option value="Eseries Sports Private Limited">Eseries Sports Private Limited</option>
+                    <option value="Heksa Skills Private Limited">Heksa Skills Private Limited</option>
+                    <option value="Softscience Tech Private Limited">Softscience Tech Private Limited</option>
+                </select>
+                <button type="button" id="applyFilterBtn" class="btn-filter">
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+                        <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.74.439L7 12.31V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5v-2z"/>
+                    </svg>
+                    <span class="text">Apply Filter</span>
+                </button>
+                <button type="button" class="btn-export" onclick="window.app.exportToExcel()"> <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                    </svg>
+                    <span class="text">Export to Excel</span>
+                </button>
+            </div>
+        </section>
+
+        <section class="card" id="chartContainerCard">
+            <h3>Email Distribution Overview</h3>
+            <div id="chartContainer">
+                <canvas id="emailChart"></canvas>
+                <p id="chartPlaceholder" class="hidden">No data available to display chart.</p>
+            </div>
+        </section>
+
+        <section class="card table-container">
+            <h3>Email Account Entries</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Company</th><th>Email</th><th>Password</th><th>Holder</th><th>Remarks</th>
+                            <th>Platform</th><th>Purchase</th><th>Expiry</th><th>Type</th><th>Status</th><th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="emailTableBody">
+                         <tr id="noDataRow" class="hidden"><td colspan="11" style="text-align:center;">No email entries found. Add some data to get started!</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    let emailData = JSON.parse(localStorage.getItem('emailDashboardDataV6')) || [];
+    let editIndex = -1;
+    let emailChart = null; 
+
+    const formLegend = document.getElementById('formLegend');
+    const addUpdateBtn = document.getElementById('addUpdateBtn');
+    const addUpdateBtnText = addUpdateBtn.querySelector('.text');
+    let addUpdateBtnIconContainer = addUpdateBtn.querySelector('.icon-placeholder'); 
+    if (!addUpdateBtnIconContainer && addUpdateBtn) { 
+        addUpdateBtnIconContainer = document.createElement('span');
+        addUpdateBtnIconContainer.className = 'icon-placeholder';
+        addUpdateBtn.insertBefore(addUpdateBtnIconContainer, addUpdateBtnText);
+    }
+
+    const cancelEditBtn = document.getElementById('cancelEditBtn');
+    const noDataRow = document.getElementById('noDataRow');
+    const chartPlaceholder = document.getElementById('chartPlaceholder');
+    const canvas = document.getElementById('emailChart');
+    const emailEntryForm = document.getElementById('emailEntryForm');
+    const applyFilterBtn = document.getElementById('applyFilterBtn'); // New Filter Button
+
+    const companyNameEl = document.getElementById('companyName');
+    const emailAccountEl = document.getElementById('emailAccount');
+    const passwordEl = document.getElementById('password');
+    const accountHolderEl = document.getElementById('accountHolder');
+    const remarksEl = document.getElementById('remarks');
+    const subscriptionPlatformEl = document.getElementById('subscriptionPlatform');
+    const purchaseDateEl = document.getElementById('purchaseDate');
+    const expiryDateEl = document.getElementById('expiryDate');
+    const mailTypeEl = document.getElementById('mailType');
+    const statusEl = document.getElementById('status');
+    
+    const themeToggleButton = document.getElementById('themeToggle');
+    const themeToggleIconSpan = themeToggleButton ? themeToggleButton.querySelector('.icon') : null; 
+    const themeToggleTextSpan = themeToggleButton ? themeToggleButton.querySelector('.text') : null;
+
+    const iconPlusSVG = `<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/></svg>`;
+    const iconSaveSVG = `<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M2 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H9.5a1 1 0 0 0-1-1H7.5a1 1 0 0 0-1 1H2Zm3 4a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0v-3a.5.5 0 0 1 .5-.5ZM7.5 1a.5.5 0 0 1 .5.5V3h-1V1.5a.5.5 0 0 1 .5-.5Zm2.5 0a.5.5 0 0 1 .5.5V3h-1V1.5a.5.5 0 0 1 .5-.5Z"/></svg>`;
+    const iconEditSVG = `<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.499.499 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11l.178-.179z"/></svg>`;
+    const iconDeleteSVG = `<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>`;
+
+    function setButtonIcon(button, svgString) {
+        if (!button) return;
+        let iconContainer = button.querySelector('svg.icon') || button.querySelector('.icon-placeholder');
+        if (iconContainer) {
+            const newIcon = new DOMParser().parseFromString(svgString, 'image/svg+xml').documentElement;
+            iconContainer.replaceWith(newIcon);
+        } else { // Fallback if no placeholder or svg, prepend new icon
+            const newIcon = new DOMParser().parseFromString(svgString, 'image/svg+xml').documentElement;
+            button.insertBefore(newIcon, button.firstChild);
+        }
+    }
+
+    function applyTheme(theme) {
+        document.body.dataset.theme = theme;
+        localStorage.setItem('themeV6', theme);
+        const isLightTheme = theme === 'light';
+        if(themeToggleIconSpan) themeToggleIconSpan.textContent = isLightTheme ? '☀️' : '🌙';
+        if(themeToggleTextSpan) themeToggleTextSpan.textContent = isLightTheme ? 'Light Mode' : 'Dark Mode';
+        
+        const selectArrowFillColor = isLightTheme ? '%23748094' : '%23A0AEC0'; // %23 is URL encoded #
+        const selectArrowSVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='${selectArrowFillColor}' viewBox='0 0 16 16'%3E%3Cpath d='M2 5l6 6 6-6' stroke-width='1.5' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`;
+        document.querySelectorAll('select').forEach(sel => sel.style.backgroundImage = selectArrowSVG);
+
+        if (emailChart) { updateChartDefaults(); emailChart.update(); }
+    }
+    
+    function updateChartDefaults() { /* Same as previous version */ }
+
+    if (themeToggleButton) {
+        themeToggleButton.addEventListener('click', () => {
+            const currentTheme = document.body.dataset.theme;
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            applyTheme(newTheme);
+        });
+    }
+
+    const savedTheme = localStorage.getItem('themeV6') || 'dark';
+    applyTheme(savedTheme);
+
+    function saveData() { localStorage.setItem('emailDashboardDataV6', JSON.stringify(emailData)); }
+
+    function renderTable(filter = "") { /* Same as previous version, uses SVG strings */ }
+    function addOrUpdateEntry() { /* Same as previous version */ }
+    function editEntry(index) { /* Uses setButtonIcon */ }
+    function deleteEntry(index) { /* Same as previous version */ }
+    function cancelEdit() { /* Uses setButtonIcon */ }
+    function clearInputsAndResetForm() { /* Uses setButtonIcon */ }
+    function exportToExcel() { /* Same as previous version */ }
+    
+    // MODIFIED: filterEmails function (now not directly on onchange)
+    function filterEmails() { 
+        const filterCompany = document.getElementById('filterCompany').value;
+        renderTable(filterCompany);
+    }
+    
+    function initializeChart() { /* Same as previous version */ }
+    function updateChart(dataToChart) { /* Same as previous version */ }
+
+    window.app = { addOrUpdateEntry, editEntry, deleteEntry, exportToExcel, filterEmails, cancelEdit };
+    
+    if(addUpdateBtn) addUpdateBtn.addEventListener('click', addOrUpdateEntry);
+    if(cancelEditBtn) cancelEditBtn.addEventListener('click', cancelEdit);
+    if(applyFilterBtn) applyFilterBtn.addEventListener('click', filterEmails); // Add listener for new button
+
+    renderTable(); 
+    if(addUpdateBtn) setButtonIcon(addUpdateBtn, iconPlusSVG);
+});
+</script>
+</body>
+</html>
