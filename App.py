@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- UPDATED: Custom CSS with Both Light and Dark Themes ---
+# --- Custom CSS with Both Light and Dark Themes ---
 def load_css():
     css_to_inject = """
     :root { /* Default: Dark Theme */
@@ -116,11 +116,12 @@ def load_css():
     st.markdown(f'<style>{css_to_inject}</style>', unsafe_allow_html=True)
 
 
-# --- Google Sheets Connection (No Changes) ---
+# --- Google Sheets Connection ---
 SCOPE = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 creds_dict = st.secrets["gcp_service_account"]
 creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
 gc = gspread.authorize(creds)
+
 SPREADSHEET_NAME = "Email Dashboard Data"
 try:
     spreadsheet = gc.open(SPREADSHEET_NAME)
@@ -128,9 +129,13 @@ try:
 except gspread.exceptions.SpreadsheetNotFound:
     st.error(f"Spreadsheet '{SPREADSHEET_NAME}' not found. Please check the name and that you've shared it with the service account email.")
     st.stop()
-ALL_COLUMNS = ["companyName", "emailAccount", "password", "accountHolder", "remarks", "subscriptionPlatform", "purchaseDate", "expiryDate", "mailType", "status"]
+    
+ALL_COLUMNS = [
+    "companyName", "emailAccount", "password", "accountHolder", "remarks",
+    "subscriptionPlatform", "purchaseDate", "expiryDate", "mailType", "status"
+]
 
-# --- Data Functions (No Changes) ---
+# --- Data Functions ---
 def load_data():
     df = get_as_dataframe(worksheet, evaluate_formulas=False, header=1)
     df.dropna(how='all', inplace=True)
@@ -141,18 +146,19 @@ def load_data():
     df = df.astype(str).fillna("")
     df.replace(['nan', 'None', '<NA>'], '', inplace=True)
     return df
+
 def save_data(df):
     df_to_save = df.astype(str)
     set_with_dataframe(worksheet, df_to_save)
 
-# --- App Constants & Configs (No Changes) ---
+
+# --- App Constants ---
 COMPANY_OPTIONS = ["", "Rewardoo Private Limited", "Eseries Sports Private Limited", "Heksa Skills Private Limited", "Softscience Tech Private Limited"]
 PLATFORM_OPTIONS = ["", "Hostinger", "GoDaddy", "Google Console (Workspace)", "Zoho Mail", "Microsoft 365 (Exchange)"]
 MAIL_TYPE_OPTIONS = ["", "Gmail Regular", "Gmail Paid (Workspace)", "Hostinger Webmail", "GoDaddy Webmail", "Zoho Standard", "Microsoft Exchange"]
 STATUS_OPTIONS = ["Active", "Inactive", "On Hold"]
 COLUMN_CONFIG = { "companyName": st.column_config.SelectboxColumn("Company", options=COMPANY_OPTIONS[1:], required=True), "emailAccount": st.column_config.TextColumn("Email", required=True), "accountHolder": st.column_config.TextColumn("Account Holder", required=True), "subscriptionPlatform": st.column_config.SelectboxColumn("Platform", options=PLATFORM_OPTIONS[1:], required=True), "purchaseDate": st.column_config.DateColumn("Purchase Date", format="YYYY-MM-DD", required=True), "expiryDate": st.column_config.DateColumn("Expiry Date", format="YYYY-MM-DD", required=True), "mailType": st.column_config.SelectboxColumn("Mail Type", options=MAIL_TYPE_OPTIONS[1:], required=True), "status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS, default="Active", required=True), "remarks": st.column_config.TextColumn("Remarks"),}
 
-# --- Login and Main App Functions (No Changes, except adding theme toggle to sidebar) ---
 def show_login_page():
     st.title("Company Email Dashboard")
     cols = st.columns([1, 1.5, 1])
@@ -173,8 +179,7 @@ def show_main_app():
     with st.sidebar:
         st.success(f"Logged in as **{st.secrets['app_credentials']['username']}**")
         
-        # --- NEW: Theme Toggle Switch ---
-        # We use a callback to update the session state without rerunning the whole script just for the toggle
+        # Theme Toggle Switch
         def theme_changed():
             if st.session_state.theme_toggle:
                 st.session_state.theme = "dark"
@@ -190,28 +195,28 @@ def show_main_app():
         
         if st.button("Logout", use_container_width=True):
             st.session_state.logged_in = False
-            # Clear theme choice on logout
             if "theme" in st.session_state:
                 del st.session_state.theme
             st.rerun()
 
     st.title("Company Email Dashboard")
 
-    # --- NEW: Logic to apply the selected theme ---
+    # Corrected logic to apply the selected theme to the main page body
     if st.session_state.theme == "light":
         components.html(
-            "<script>document.body.setAttribute('data-theme', 'light');</script>",
+            """<script>window.parent.document.body.setAttribute('data-theme', 'light');</script>""",
             height=0, width=0
         )
     else:
         components.html(
-            "<script>document.body.removeAttribute('data-theme');</script>",
+            """<script>window.parent.document.body.removeAttribute('data-theme');</script>""",
             height=0, width=0
         )
 
-    # --- Rest of the main app (no changes) ---
+    # --- Rest of the main app ---
     if 'email_data' not in st.session_state:
         st.session_state.email_data = load_data()
+
     with st.expander("➕ Add New Email Entry", expanded=False):
         with st.form("new_entry_form", clear_on_submit=True):
             cols = st.columns((1, 1, 1)); companyName = cols[0].selectbox("Company Name*", options=COMPANY_OPTIONS[1:]); emailAccount = cols[1].text_input("Email Account*"); password = cols[2].text_input("Password*", type="password")
@@ -226,6 +231,7 @@ def show_main_app():
                     st.session_state.email_data = pd.concat([st.session_state.email_data, new_entry_df], ignore_index=True)
                     save_data(st.session_state.email_data)
                     st.success("✅ Entry added successfully!"); st.rerun()
+
     st.header("Filter & Export Data")
     with st.container():
         filter_cols = st.columns((2, 1))
@@ -239,6 +245,7 @@ def show_main_app():
         csv_data = to_csv(display_df)
         filter_cols[1].markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
         filter_cols[1].download_button(label="📥 Export to CSV", data=csv_data, file_name='company_email_data.csv', mime='text/csv')
+
     st.header("Email Account Entries")
     if display_df.empty: st.warning("No data found for the selected filter.")
     else:
@@ -256,7 +263,6 @@ def show_main_app():
 
 # --- Main App Execution Logic ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
-# Initialize theme
 if 'theme' not in st.session_state: st.session_state.theme = "dark"
 
 load_css()
