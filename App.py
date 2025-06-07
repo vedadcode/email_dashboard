@@ -159,16 +159,12 @@ def calculate_metrics(df):
 
 def get_status_chart(df):
     if df.empty or df['status'].nunique() == 0:
-        return alt.Chart(pd.DataFrame({'status': ['No Data'], 'count': [1]})).mark_arc().encode(
-            color=alt.value('#444') # A placeholder color
-        ).properties(title="No status data available")
+        return alt.Chart(pd.DataFrame({'status': ['No Data'], 'count': [1]})).mark_arc().encode(color=alt.value('#444')).properties(title="No status data available")
     status_counts = df['status'].value_counts().reset_index()
     status_counts.columns = ['status', 'count']
     chart = alt.Chart(status_counts).mark_arc(innerRadius=60, outerRadius=100).encode(
         theta=alt.Theta(field="count", type="quantitative"),
-        color=alt.Color(field="status", type="nominal",
-                        scale=alt.Scale(domain=['Active', 'Inactive', 'On Hold'], range=['#23D5AB', '#F93154', '#FFC107']),
-                        legend=None),
+        color=alt.Color(field="status", type="nominal", scale=alt.Scale(domain=['Active', 'Inactive', 'On Hold'], range=['#23D5AB', '#F93154', '#FFC107']), legend=None),
         tooltip=['status', 'count']
     ).properties(width=300, height=300)
     return chart
@@ -216,7 +212,7 @@ def show_main_app():
     with cols[1]: st.metric("Active Accounts", active, delta=f"{round((active/total)*100) if total > 0 else 0}% Active")
     with cols[2]: st.metric("Expiring Soon", expiring, delta=f"{expiring} within 30 days", delta_color="inverse")
     
-    with st.expander("Add New Email Entry", icon="➕"):
+    with st.expander("Add a Single Entry", icon="➕"):
         with st.form("new_entry_form", clear_on_submit=True):
             cols = st.columns((1, 1, 1)); companyName = cols[0].selectbox("Company Name*", options=COMPANY_OPTIONS[1:]); emailAccount = cols[1].text_input("Email Account*"); password = cols[2].text_input("Password*", type="password")
             cols = st.columns((1, 1, 1)); accountHolder = cols[0].text_input("Account Holder*"); subscriptionPlatform = cols[1].selectbox("Subscription Platform*", options=PLATFORM_OPTIONS[1:]); mailType = cols[2].selectbox("Mail Type*", options=MAIL_TYPE_OPTIONS[1:])
@@ -229,22 +225,40 @@ def show_main_app():
                     st.session_state.email_data = pd.concat([st.session_state.email_data, new_row], ignore_index=True)
                     save_data(st.session_state.email_data)
                     st.success("✅ Entry added successfully!"); st.rerun()
+    
+    with st.expander("Bulk Import from CSV File", icon="📁"):
+        st.info("Download the template, fill it out, and upload it here. The 'emailAccount' column must be unique for each entry.")
+        template_df = pd.DataFrame(columns=ALL_COLUMNS)
+        csv_template = template_df.to_csv(index=False).encode('utf-8')
+        st.download_button("Download CSV Template", csv_template, "import_template.csv", "text/csv", use_container_width=True)
+        uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+        if uploaded_file is not None:
+            try:
+                new_data_df = pd.read_csv(uploaded_file)
+                if not all(col in new_data_df.columns for col in ALL_COLUMNS):
+                    st.error(f"The uploaded CSV is missing or has incorrect columns. Please use the template provided.")
+                else:
+                    new_data_df = new_data_df[ALL_COLUMNS].astype(str).fillna("")
+                    combined_df = pd.concat([st.session_state.email_data, new_data_df], ignore_index=True)
+                    combined_df.drop_duplicates(subset=['emailAccount'], keep='last', inplace=True)
+                    save_data(combined_df)
+                    st.session_state.email_data = combined_df
+                    st.success(f"✅ Successfully imported and merged data! {len(new_data_df)} rows were processed."); st.rerun()
+            except Exception as e:
+                st.error(f"An error occurred while processing the file: {e}")
 
     st.markdown("<h3 class='glass-card'><i class='bi bi-table'></i> Email Account Records</h3>", unsafe_allow_html=True)
     selected_company = st.selectbox("Filter by Company", options=["Show All Companies"] + st.session_state.email_data["companyName"].dropna().unique().tolist())
     display_df = st.session_state.email_data[st.session_state.email_data["companyName"] == selected_company].copy() if selected_company != "Show All Companies" else st.session_state.email_data.copy()
 
     if display_df.empty:
-        st.info("No data to display for the current selection. Add an entry to get started!")
+        st.info("No data to display for the current selection. Add an entry or import a CSV to get started!")
     else:
         df_for_editor = display_df.copy()
         df_for_editor['purchaseDate'] = pd.to_datetime(df_for_editor['purchaseDate'], errors='coerce')
         df_for_editor['expiryDate'] = pd.to_datetime(df_for_editor['expiryDate'], errors='coerce')
-
         edited_df = st.data_editor(df_for_editor.drop(columns=['password'], errors='ignore'), column_config=COLUMN_CONFIG, num_rows="dynamic", use_container_width=True, key="data_editor", hide_index=True)
-        
-        # Note: A full implementation for saving edits from the data_editor requires more complex comparison logic.
-        # This app currently saves on 'Add Entry'. Edits in the table are visual for the session.
+        # A full save implementation for the data editor would go here
 
     st.markdown("<h3 class='glass-card'><i class='bi bi-pie-chart-fill'></i> Account Status & Export</h3>", unsafe_allow_html=True)
     cols = st.columns([0.6, 0.4])
