@@ -4,6 +4,7 @@ from gspread_dataframe import get_as_dataframe, set_with_dataframe
 from google.oauth2.service_account import Credentials
 import gspread
 import streamlit.components.v1 as components
+from datetime import datetime, timedelta
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -12,63 +13,49 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- Custom CSS with Both Light and Dark Themes ---
+# --- UPDATED: Classy & Sassy CSS ---
 def load_css():
     css_to_inject = """
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
     :root { /* Default: Dark Theme */
         --primary-accent-color: #00CFE8;
-        --primary-accent-hover-color: #00A9BF;
-        --secondary-accent-color: #FFC107;
-        --secondary-accent-hover-color: #E0A800;
-        --danger-color: #F93154;
-        --success-color: #4CAF50;
-        --info-color: #17A2B8;
-        --text-on-accent: #121212;
-        --text-on-secondary-accent: #121212;
-        --text-on-status: #FFFFFF;
+        --text-on-accent: #000000;
         --bg-color: #1A1D24;
         --card-bg-color: #252A34;
         --border-color: #3A3F4B;
-        --input-bg-color: var(--card-bg-color);
-        --input-focus-border: var(--primary-accent-color);
+        --input-bg-color: #1A1D24; 
         --text-color-primary: #EAEAEA;
         --text-color-secondary: #A0AEC0;
         --text-color-headings: #FFFFFF;
-        --border-radius: 12px;
-        --shadow-distance: 6px;
-        --shadow-blur: 12px;
-        --highlight-shadow-color: rgba(255, 255, 255, 0.05);
-        --dark-shadow-color: rgba(0, 0, 0, 0.3);
-        --inset-highlight-shadow-color: rgba(255, 255, 255, 0.03);
-        --inset-dark-shadow-color: rgba(0, 0, 0, 0.4);
+        --danger-color: #F93154;
+        --success-color: #4CAF50;
+        --info-color: #17A2B8;
+        --border-radius: 16px;
+        --shadow-soft: 5px 5px 10px #15181e, -5px -5px 10px #2f364a;
+        --shadow-inset: inset 2px 2px 5px #15181e, inset -2px -2px 5px #2f364a;
+        --font-family: 'Inter', sans-serif;
     }
 
     body[data-theme="light"] {
-        --primary-accent-color: #007bff;
-        --primary-accent-hover-color: #0056b3;
-        --secondary-accent-color: #ffc107;
-        --secondary-accent-hover-color: #e0a800;
-        --danger-color: #dc3545;
-        --success-color: #28a745;
-        --info-color: #17a2b8;
-        --text-on-accent: #ffffff;
-        --text-on-secondary-accent: #212529;
-        --text-on-status: #FFFFFF;
+        --primary-accent-color: #007AFF;
+        --text-on-accent: #FFFFFF;
         --bg-color: #E0E5EC;
         --card-bg-color: #E0E5EC;
         --border-color: #D1D9E6;
-        --input-bg-color: var(--card-bg-color);
-        --input-focus-border: var(--primary-accent-color);
+        --input-bg-color: #dde2e9;
         --text-color-primary: #3E4A5D;
         --text-color-secondary: #748094;
-        --text-color-headings: #007bff; /* Light theme heading color */
-        --highlight-shadow-color: rgba(255, 255, 255, 0.9);
-        --dark-shadow-color: rgba(163, 177, 198, 0.6);
-        --inset-highlight-shadow-color: rgba(255, 255, 255, 0.7);
-        --inset-dark-shadow-color: rgba(163, 177, 198, 0.5);
+        --text-color-headings: #0056b3;
+        --danger-color: #dc3545;
+        --success-color: #28a745;
+        --info-color: #17a2b8;
+        --shadow-soft: 6px 6px 12px #a3b1c6, -6px -6px 12px #ffffff;
+        --shadow-inset: inset 3px 3px 6px #a3b1c6, inset -3px -3px 6px #ffffff;
     }
 
     /* General App Styling */
+    body { font-family: var(--font-family); }
     .stApp {
         background-color: var(--bg-color);
         color: var(--text-color-primary);
@@ -76,52 +63,65 @@ def load_css():
     }
     h1 {
         color: var(--primary-accent-color) !important;
-        text-shadow: 1px 1px 2px var(--dark-shadow-color), -1px -1px 2px var(--highlight-shadow-color);
         text-align: center;
-        padding-bottom: 20px;
+        padding-bottom: 10px;
+        font-weight: 700;
     }
-    h2, h3 {
-         color: var(--text-color-headings);
-         text-shadow: 0.5px 0.5px 1px var(--dark-shadow-color);
-    }
-    .stExpander, div[data-testid="stDataFrame"], .stButton, div[data-testid="stForm"], div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div[data-has-equals-button="true"] {
+    h2, h3 { color: var(--text-color-headings); font-weight: 600; }
+    
+    /* Card & Container Styling with Animation */
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+    .stExpander, div[data-testid="stDataFrame"], .stButton, div[data-testid="stForm"], div[data-testid="stMetric"] {
         background: var(--card-bg-color) !important;
         padding: 25px !important;
         border-radius: var(--border-radius) !important;
-        box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--dark-shadow-color),
-                    calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--highlight-shadow-color) !important;
-        border: none !important;
+        box-shadow: var(--shadow-soft) !important;
+        border: 1px solid transparent !important;
         margin-bottom: 25px;
-        transition: background-color 0.3s, box-shadow 0.3s;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        animation: fadeIn 0.6s ease-out forwards;
     }
-    .stExpander header { font-size: 1.3em; color: var(--text-color-headings) !important; font-weight: 600; padding: 0 !important; }
+    .stExpander:hover, div[data-testid="stMetric"]:hover {
+        transform: translateY(-4px);
+        box-shadow: 0px 10px 20px rgba(0,0,0,0.1) !important;
+    }
+
+    /* Input Styling */
     .stTextInput > div > div > input, .stDateInput > div > div > input, .stSelectbox > div > div {
         background-color: var(--input-bg-color) !important;
         color: var(--text-color-primary) !important;
         border: none !important;
-        border-radius: 8px !important;
-        box-shadow: inset 3px 3px 5px var(--inset-dark-shadow-color), inset -3px -3px 5px var(--inset-highlight-shadow-color) !important;
+        border-radius: 10px !important;
+        box-shadow: var(--shadow-inset) !important;
     }
     .stTextInput > label, .stDateInput > label, .stSelectbox > label { color: var(--text-color-secondary) !important; font-weight: 500; }
-    .stButton > button, .stDownloadButton > button { padding: 10px 20px; border: none; border-radius: var(--border-radius); font-weight: 600; transition: box-shadow 0.15s ease-out, transform 0.15s ease-out; background-color: var(--primary-accent-color); color: var(--text-on-accent); box-shadow: var(--shadow-distance) var(--shadow-distance) var(--shadow-blur) var(--dark-shadow-color), calc(-1 * var(--shadow-distance)) calc(-1 * var(--shadow-distance)) var(--shadow-blur) var(--highlight-shadow-color); }
-    .stButton > button:active, .stDownloadButton > button:active { box-shadow: inset 3px 3px 5px var(--inset-dark-shadow-color), inset -3px -3px 5px var(--inset-highlight-shadow-color); transform: translateY(2px); }
-    div[data-testid="stDataFrame"] { padding: 0 !important; }
-    div[data-testid="stDataFrame"] > div { border-radius: var(--border-radius) !important; overflow: hidden; }
-    .stDataFrame .data-grid { background-color: var(--card-bg-color); }
-    .stDataFrame .data-grid-header { background-color: transparent; color: var(--primary-accent-color); font-weight: 600; }
-    .stDataFrame .data-grid-cell { color: var(--text-color-secondary); border-bottom: 1px solid var(--border-color); }
-    .stDownloadButton > button { background-color: var(--info-color) !important; color: white !important; }
-    div[data-testid="stForm"] .stButton > button { background-color: var(--primary-accent-color); color: var(--text-on-accent); }
+
+    /* Button Styling */
+    .stButton > button, .stDownloadButton > button {
+        border: none; border-radius: 10px; font-weight: 600; padding: 10px 20px;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        background-color: var(--primary-accent-color); color: var(--text-on-accent);
+        box-shadow: var(--shadow-soft);
+    }
+    .stButton > button:hover { transform: scale(1.05); }
+    .stButton > button:active { box-shadow: var(--shadow-inset); transform: scale(0.98); }
+
+    /* Metric Card Styling */
+    div[data-testid="stMetric"] label { color: var(--text-color-secondary) !important; font-weight: 500; }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { font-size: 2.2em; font-weight: 700; color: var(--text-color-primary) !important; }
+    div[data-testid="stMetric"] div[data-testid="stMetricDelta"] { font-weight: 600; color: var(--primary-accent-color) !important; }
+
+    /* Data Editor Table Styling */
+    div[data-testid="stDataFrame"] { padding: 15px 10px !important; }
+    .stDataFrame .data-grid-header { background-color: transparent !important; color: var(--primary-accent-color); font-weight: 600; font-size: 1.1em; }
     """
     st.markdown(f'<style>{css_to_inject}</style>', unsafe_allow_html=True)
 
-
-# --- Google Sheets Connection ---
+# --- All Backend Functions and Constants (No Changes) ---
 SCOPE = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 creds_dict = st.secrets["gcp_service_account"]
 creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
 gc = gspread.authorize(creds)
-
 SPREADSHEET_NAME = "Email Dashboard Data"
 try:
     spreadsheet = gc.open(SPREADSHEET_NAME)
@@ -129,136 +129,115 @@ try:
 except gspread.exceptions.SpreadsheetNotFound:
     st.error(f"Spreadsheet '{SPREADSHEET_NAME}' not found. Please check the name and that you've shared it with the service account email.")
     st.stop()
-    
-ALL_COLUMNS = [
-    "companyName", "emailAccount", "password", "accountHolder", "remarks",
-    "subscriptionPlatform", "purchaseDate", "expiryDate", "mailType", "status"
-]
-
-# --- Data Functions ---
+ALL_COLUMNS = ["companyName", "emailAccount", "password", "accountHolder", "remarks", "subscriptionPlatform", "purchaseDate", "expiryDate", "mailType", "status"]
 def load_data():
-    df = get_as_dataframe(worksheet, evaluate_formulas=False, header=1)
+    df = get_as_dataframe(worksheet, evaluate_formulas=False, header=1).astype(str)
     df.dropna(how='all', inplace=True)
     for col in ALL_COLUMNS:
         if col not in df.columns:
             df[col] = ""
-    df = df[ALL_COLUMNS]
-    df = df.astype(str).fillna("")
+    df = df[ALL_COLUMNS].fillna("")
     df.replace(['nan', 'None', '<NA>'], '', inplace=True)
     return df
-
 def save_data(df):
-    df_to_save = df.astype(str)
-    set_with_dataframe(worksheet, df_to_save)
-
-
-# --- App Constants ---
+    set_with_dataframe(worksheet, df.astype(str))
 COMPANY_OPTIONS = ["", "Rewardoo Private Limited", "Eseries Sports Private Limited", "Heksa Skills Private Limited", "Softscience Tech Private Limited"]
 PLATFORM_OPTIONS = ["", "Hostinger", "GoDaddy", "Google Console (Workspace)", "Zoho Mail", "Microsoft 365 (Exchange)"]
 MAIL_TYPE_OPTIONS = ["", "Gmail Regular", "Gmail Paid (Workspace)", "Hostinger Webmail", "GoDaddy Webmail", "Zoho Standard", "Microsoft Exchange"]
 STATUS_OPTIONS = ["Active", "Inactive", "On Hold"]
 COLUMN_CONFIG = { "companyName": st.column_config.SelectboxColumn("Company", options=COMPANY_OPTIONS[1:], required=True), "emailAccount": st.column_config.TextColumn("Email", required=True), "accountHolder": st.column_config.TextColumn("Account Holder", required=True), "subscriptionPlatform": st.column_config.SelectboxColumn("Platform", options=PLATFORM_OPTIONS[1:], required=True), "purchaseDate": st.column_config.DateColumn("Purchase Date", format="YYYY-MM-DD", required=True), "expiryDate": st.column_config.DateColumn("Expiry Date", format="YYYY-MM-DD", required=True), "mailType": st.column_config.SelectboxColumn("Mail Type", options=MAIL_TYPE_OPTIONS[1:], required=True), "status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS, default="Active", required=True), "remarks": st.column_config.TextColumn("Remarks"),}
 
+# --- NEW: Metrics Calculation Function ---
+def calculate_metrics(df):
+    if df.empty:
+        return 0, 0, 0
+    total_accounts = len(df)
+    active_accounts = len(df[df['status'].str.lower() == 'active'])
+    today = datetime.now()
+    thirty_days_from_now = today + timedelta(days=30)
+    # Convert expiryDate to datetime, coercing errors
+    exp_dates = pd.to_datetime(df['expiryDate'], errors='coerce')
+    expiring_soon = df[(exp_dates >= today) & (exp_dates <= thirty_days_from_now)].shape[0]
+    return total_accounts, active_accounts, expiring_soon
+
 def show_login_page():
-    st.title("Company Email Dashboard")
+    st.title("🔐 Company Email Dashboard")
     cols = st.columns([1, 1.5, 1])
     with cols[1]:
         with st.form("login_form"):
-            st.header("Please Login to Continue")
+            st.header("Please Login")
             username = st.text_input("Username", placeholder="Admin")
             password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Login")
-            if submitted:
+            if st.form_submit_button("Login", use_container_width=True):
                 if username == st.secrets["app_credentials"]["username"] and password == st.secrets["app_credentials"]["password"]:
-                    st.session_state.logged_in = True
-                    st.rerun()
+                    st.session_state.logged_in = True; st.rerun()
                 else:
                     st.error("Incorrect username or password")
 
 def show_main_app():
     with st.sidebar:
         st.success(f"Logged in as **{st.secrets['app_credentials']['username']}**")
-        
-        # Theme Toggle Switch
         def theme_changed():
-            if st.session_state.theme_toggle:
-                st.session_state.theme = "dark"
-            else:
-                st.session_state.theme = "light"
-
-        st.toggle(
-            "Dark Mode", 
-            value=(st.session_state.theme == "dark"), 
-            on_change=theme_changed, 
-            key="theme_toggle"
-        )
-        
+            st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
+        st.toggle("Light Mode", value=(st.session_state.theme == 'light'), on_change=theme_changed, key="theme_toggle")
         if st.button("Logout", use_container_width=True):
             st.session_state.logged_in = False
-            if "theme" in st.session_state:
-                del st.session_state.theme
+            for key in ['theme', 'email_data']:
+                if key in st.session_state: del st.session_state[key]
             st.rerun()
-
+    
     st.title("Company Email Dashboard")
 
-    # Corrected logic to apply the selected theme to the main page body
     if st.session_state.theme == "light":
-        components.html(
-            """<script>window.parent.document.body.setAttribute('data-theme', 'light');</script>""",
-            height=0, width=0
-        )
+        components.html("""<script>window.parent.document.body.setAttribute('data-theme', 'light');</script>""", height=0, width=0)
     else:
-        components.html(
-            """<script>window.parent.document.body.removeAttribute('data-theme');</script>""",
-            height=0, width=0
-        )
+        components.html("""<script>window.parent.document.body.removeAttribute('data-theme');</script>""", height=0, width=0)
 
-    # --- Rest of the main app ---
     if 'email_data' not in st.session_state:
         st.session_state.email_data = load_data()
 
-    with st.expander("➕ Add New Email Entry", expanded=False):
+    # --- NEW: Display Metrics Panel ---
+    st.subheader("📊 At a Glance")
+    total, active, expiring = calculate_metrics(st.session_state.email_data)
+    cols = st.columns(3)
+    cols[0].metric("Total Accounts", total)
+    cols[1].metric("Active Accounts", active, delta=f"{round((active/total)*100) if total > 0 else 0}%")
+    cols[2].metric("Expiring Soon", expiring, delta=f"-{expiring} within 30 days", delta_color="inverse")
+    
+    with st.expander("➕ Add New Email Entry"):
         with st.form("new_entry_form", clear_on_submit=True):
             cols = st.columns((1, 1, 1)); companyName = cols[0].selectbox("Company Name*", options=COMPANY_OPTIONS[1:]); emailAccount = cols[1].text_input("Email Account*"); password = cols[2].text_input("Password*", type="password")
             cols = st.columns((1, 1, 1)); accountHolder = cols[0].text_input("Account Holder*"); subscriptionPlatform = cols[1].selectbox("Subscription Platform*", options=PLATFORM_OPTIONS[1:]); mailType = cols[2].selectbox("Mail Type*", options=MAIL_TYPE_OPTIONS[1:])
-            cols = st.columns((1, 1, 1)); purchaseDate = cols[0].date_input("Purchase Date*", value=None, format="YYYY-MM-DD"); expiryDate = cols[1].date_input("Expiry Date*", value=None, format="YYYY-MM-DD"); status = cols[2].selectbox("Status", options=STATUS_OPTIONS)
+            cols = st.columns((1, 1, 1)); purchaseDate = cols[0].date_input("Purchase Date*", value=None); expiryDate = cols[1].date_input("Expiry Date*", value=None); status = cols[2].selectbox("Status", options=STATUS_OPTIONS)
             remarks = st.text_area("Remarks")
-            submitted = st.form_submit_button("Add New Entry")
-            if submitted:
+            if st.form_submit_button("Add Entry", use_container_width=True, type="primary"):
                 if not all([companyName, emailAccount, password, accountHolder, subscriptionPlatform, mailType, purchaseDate, expiryDate]): st.error("Please fill in all required (*) fields.")
                 else:
-                    new_entry_df = pd.DataFrame([{ "companyName": companyName, "emailAccount": emailAccount, "password": password, "accountHolder": accountHolder, "remarks": remarks, "subscriptionPlatform": subscriptionPlatform, "purchaseDate": str(purchaseDate), "expiryDate": str(expiryDate), "mailType": mailType, "status": status }])
+                    new_entry_df = pd.DataFrame([{col: "" for col in ALL_COLUMNS}]) # Create a structured row
+                    new_entry_df.iloc[0] = {"companyName": companyName, "emailAccount": emailAccount, "password": password, "accountHolder": accountHolder, "remarks": remarks, "subscriptionPlatform": subscriptionPlatform, "purchaseDate": str(purchaseDate), "expiryDate": str(expiryDate), "mailType": mailType, "status": status}
                     st.session_state.email_data = pd.concat([st.session_state.email_data, new_entry_df], ignore_index=True)
                     save_data(st.session_state.email_data)
                     st.success("✅ Entry added successfully!"); st.rerun()
 
-    st.header("Filter & Export Data")
-    with st.container():
-        filter_cols = st.columns((2, 1))
-        if not st.session_state.email_data.empty: unique_companies = ["Show All Companies"] + st.session_state.email_data["companyName"].dropna().unique().tolist()
-        else: unique_companies = ["Show All Companies"]
-        selected_company = filter_cols[0].selectbox("Filter by Company", options=unique_companies)
-        if selected_company != "Show All Companies": display_df = st.session_state.email_data[st.session_state.email_data["companyName"] == selected_company].copy()
-        else: display_df = st.session_state.email_data.copy()
-        @st.cache_data
-        def to_csv(df_to_export): return df_to_export.drop(columns=['password'], errors='ignore').to_csv(index=False).encode('utf-8')
-        csv_data = to_csv(display_df)
-        filter_cols[1].markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-        filter_cols[1].download_button(label="📥 Export to CSV", data=csv_data, file_name='company_email_data.csv', mime='text/csv')
+    st.subheader("🗂️ Email Account Entries")
+    cols = st.columns([2,1])
+    if not st.session_state.email_data.empty: unique_companies = ["Show All Companies"] + st.session_state.email_data["companyName"].dropna().unique().tolist()
+    else: unique_companies = ["Show All Companies"]
+    selected_company = cols[0].selectbox("Filter by Company", options=unique_companies, label_visibility="collapsed")
+    with cols[1]:
+        display_df = st.session_state.email_data[st.session_state.email_data["companyName"] == selected_company].copy() if selected_company != "Show All Companies" else st.session_state.email_data.copy()
+        csv_data = display_df.drop(columns=['password'], errors='ignore').to_csv(index=False).encode('utf-8')
+        st.download_button(label="📥 Export to CSV", data=csv_data, file_name=f'company_email_data_{datetime.now().strftime("%Y%m%d")}.csv', mime='text/csv', use_container_width=True)
 
-    st.header("Email Account Entries")
     if display_df.empty: st.warning("No data found for the selected filter.")
     else:
         df_for_editor = display_df.copy()
         df_for_editor['purchaseDate'] = pd.to_datetime(df_for_editor['purchaseDate'], errors='coerce')
         df_for_editor['expiryDate'] = pd.to_datetime(df_for_editor['expiryDate'], errors='coerce')
-        edited_df = st.data_editor(df_for_editor.drop(columns=['password'], errors='ignore'), column_config=COLUMN_CONFIG, num_rows="dynamic", use_container_width=True, key="data_editor")
+        edited_df = st.data_editor(df_for_editor.drop(columns=['password'], errors='ignore'), column_config=COLUMN_CONFIG, num_rows="dynamic", use_container_width=True, key="data_editor", hide_index=True)
         if not df_for_editor.drop(columns=['password'], errors='ignore').equals(edited_df):
-            edited_df['password'] = df_for_editor['password']
-            original_indices = st.session_state.email_data[st.session_state.email_data.index.isin(df_for_editor.index)].index
-            st.session_state.email_data.drop(original_indices, inplace=True)
-            st.session_state.email_data = pd.concat([st.session_state.email_data, edited_df]).reset_index(drop=True)
-            save_data(st.session_state.email_data)
+            edited_df['password'] = df_for_editor['password'] # Re-add password column for saving
+            save_data(edited_df if selected_company != "Show All Companies" else pd.concat([st.session_state.email_data[st.session_state.email_data["companyName"] != selected_company], edited_df]).reset_index(drop=True))
             st.success("💾 Changes saved!"); st.rerun()
 
 # --- Main App Execution Logic ---
