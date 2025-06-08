@@ -121,7 +121,7 @@ creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
 gc = gspread.authorize(creds)
 
 # --- FIXED: Connecting to Google Sheets by unique ID ---
-SPREADSHEET_ID = "1xPZCI_vHs4XrR-vf63g0UlVfGhImilzV4ad5mAr4OTo" 
+SPREADSHEET_ID = "1snHjynQb3ecyXMgbP4d7WrhAtPoJpzNNC7moZTEW6FM" 
 try:
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     worksheet = spreadsheet.sheet1
@@ -139,6 +139,7 @@ except Exception as e:
 ALL_COLUMNS = ["companyName", "emailAccount", "password", "accountHolder", "remarks", "subscriptionPlatform", "purchaseDate", "expiryDate", "mailType", "status"]
 
 def load_data():
+    """Loads and cleans data from the Google Sheet."""
     df = get_as_dataframe(worksheet, evaluate_formulas=False, header=1).astype(str)
     df.dropna(how='all', inplace=True)
     for col in ALL_COLUMNS:
