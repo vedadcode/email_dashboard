@@ -68,39 +68,27 @@ def load_css():
     </style>
     """, unsafe_allow_html=True)
 
-# --- Connection Manager with built-in Verifier ---
+# --- Connection Manager ---
 @st.cache_resource
 def connect_to_gsheet():
-    """Connects to Google Sheets and returns a worksheet object and a status dictionary."""
-    status = {
-        "secrets_found": False, "creds_parsed": False, "authorized": False, 
-        "sheet_opened": False, "error_message": None
-    }
     try:
-        creds_dict = st.secrets["gcp_service_account"]
-        status["secrets_found"] = True
-        
-        creds = Credentials.from_service_account_info(creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
-        status["creds_parsed"] = True
-        
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
         gc = gspread.authorize(creds)
-        status["authorized"] = True
-
         spreadsheet = gc.open_by_key("1snHjynQb3ecyXMgbP4d7WrhAtPoJpzNNC7moZTEW6FM")
-        worksheet = spreadsheet.sheet1
-        status["sheet_opened"] = True
-        
-        return worksheet, status
+        return spreadsheet.sheet1
+    except gspread.exceptions.APIError:
+        st.error("API Error: Could not access the spreadsheet. Ensure the 'Google Sheets API' & 'Google Drive API' are enabled and the sheet is shared with your service account email as 'Editor'.")
+        st.stop()
     except Exception as e:
-        status["error_message"] = str(e)
-        return None, status
+        st.error(f"An unexpected connection error occurred: {e}")
+        st.stop()
 
 # --- Backend Functions ---
 ALL_COLUMNS = ["companyName", "emailAccount", "password", "accountHolder", "remarks", "subscriptionPlatform", "purchaseDate", "expiryDate", "mailType", "status"]
 def load_data(worksheet):
     try:
         all_values = worksheet.get_all_values()
-        if not all_values or len(all_values) < 2: return pd.DataFrame(columns=ALL_COLUMNS)
+        if not all_values: return pd.DataFrame(columns=ALL_COLUMNS)
         header = all_values[0]; data = all_values[1:]
         df = pd.DataFrame(data, columns=header)
         for col in ALL_COLUMNS:
@@ -175,27 +163,12 @@ def show_login_page():
                     st.error("Incorrect username or password")
         st.markdown("</div>", unsafe_allow_html=True)
 
-def show_main_app(worksheet, connection_status):
+def show_main_app(worksheet):
     with st.sidebar:
         st.success(f"Logged in as **{st.secrets['app_credentials']['username']}**")
         def theme_changed():
             st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
         st.toggle("Light Mode", value=(st.session_state.theme == 'light'), on_change=theme_changed, key="theme_toggle")
-        
-        st.markdown("---")
-        # --- Connection Status Verifier ---
-        st.subheader("Connection Status")
-        status_ok = connection_status["sheet_opened"]
-        st.write(f"{'✅' if status_ok else '❌'} Google Sheets Connection")
-        with st.expander("Show Details"):
-            st.write(f"{'✅' if connection_status['secrets_found'] else '❌'} Secrets Loaded")
-            st.write(f"{'✅' if connection_status['creds_parsed'] else '❌'} Credentials Parsed")
-            st.write(f"{'✅' if connection_status['authorized'] else '❌'} Google Authorized")
-            st.write(f"{'✅' if connection_status['sheet_opened'] else '❌'} Spreadsheet Opened")
-            if connection_status['error_message']:
-                st.error(connection_status['error_message'])
-        st.markdown("---")
-
         if st.button("Logout", use_container_width=True):
             for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
@@ -207,14 +180,9 @@ def show_main_app(worksheet, connection_status):
 
     st.title("Company Email Dashboard")
 
-    if not worksheet:
-        st.error("DATABASE OFFLINE: Could not connect to Google Sheets. Please check the 'Connection Status' in the sidebar.")
-        st.stop()
-
     if 'email_data' not in st.session_state:
         st.session_state.email_data = load_data(worksheet)
 
-    # The rest of the page layout
     st.markdown("<h3 class='glass-card'><i class='bi bi-bar-chart-line-fill'></i> At a Glance</h3>", unsafe_allow_html=True)
     total, active, expiring = calculate_metrics(st.session_state.email_data)
     cols = st.columns(3)
@@ -266,7 +234,7 @@ if 'theme' not in st.session_state: st.session_state.theme = "dark"
 
 load_css()
 if st.session_state.logged_in:
-    worksheet, connection_status = connect_to_gsheet()
-    show_main_app(worksheet, connection_status)
+    worksheet = connect_to_gsheet()
+    show_main_app(worksheet)
 else:
     show_login_page()
