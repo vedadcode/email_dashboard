@@ -119,18 +119,12 @@ SCOPE = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis
 creds_dict = st.secrets["gcp_service_account"]
 creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
 gc = gspread.authorize(creds)
-
-# --- FIXED: Connecting to Google Sheets by unique ID ---
 SPREADSHEET_ID = "1snHjynQb3ecyXMgbP4d7WrhAtPoJpzNNC7moZTEW6FM" 
 try:
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     worksheet = spreadsheet.sheet1
 except gspread.exceptions.APIError as e:
-    st.error(
-        "API Error: Could not access the spreadsheet by its ID. "
-        "This confirms the problem is with your Google account permissions. "
-        "Please very carefully re-check two things: (1) The 'Google Sheets API' is enabled in your Google Cloud project, and (2) Your sheet is shared with your service account email address as an 'Editor'."
-    )
+    st.error("API Error: Could not access the spreadsheet. Please ensure the 'Google Sheets API' & 'Google Drive API' are enabled and the sheet is shared with your service account email as 'Editor'.")
     st.stop()
 except Exception as e:
     st.error(f"An unexpected error occurred: {e}")
@@ -139,7 +133,6 @@ except Exception as e:
 ALL_COLUMNS = ["companyName", "emailAccount", "password", "accountHolder", "remarks", "subscriptionPlatform", "purchaseDate", "expiryDate", "mailType", "status"]
 
 def load_data():
-    """Loads and cleans data from the Google Sheet."""
     df = get_as_dataframe(worksheet, evaluate_formulas=False, header=1).astype(str)
     df.dropna(how='all', inplace=True)
     for col in ALL_COLUMNS:
@@ -149,7 +142,6 @@ def load_data():
     return df
 
 def save_data(df):
-    """Saves the entire DataFrame back to the Google Sheet efficiently."""
     df_to_save = df.astype(str)
     values_to_save = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
     worksheet.clear()
@@ -178,9 +170,7 @@ def get_status_chart(df):
     status_counts.columns = ['status', 'count']
     chart = alt.Chart(status_counts).mark_arc(innerRadius=60, outerRadius=100).encode(
         theta=alt.Theta(field="count", type="quantitative"),
-        color=alt.Color(field="status", type="nominal",
-                        scale=alt.Scale(domain=['Active', 'Inactive', 'On Hold', 'Closed'], range=['#23D5AB', '#F93154', '#FFC107', '#808B96']),
-                        legend=None),
+        color=alt.Color(field="status", type="nominal", scale=alt.Scale(domain=['Active', 'Inactive', 'On Hold', 'Closed'], range=['#23D5AB', '#F93154', '#FFC107', '#808B96']), legend=None),
         tooltip=['status', 'count']
     ).properties(width=300, height=300)
     return chart
@@ -242,24 +232,41 @@ def show_main_app():
                     save_data(st.session_state.email_data)
                     st.success("✅ Entry added successfully!"); st.rerun()
     
+    # --- DOUBLE-CHECKED & IMPROVED CSV IMPORT LOGIC ---
     with st.expander("Bulk Import from CSV File", icon="📁"):
-        st.info("Download the template, fill it out, and upload it here. The 'emailAccount' column must be unique for each entry.")
+        st.info("Download the template, fill it out, and upload the file. If an email in your CSV already exists, its entry will be updated.")
         template_df = pd.DataFrame(columns=ALL_COLUMNS)
-        csv_template = template_df.to_csv(index=False).encode('utf-8')
-        st.download_button("Download CSV Template", csv_template, "import_template.csv", "text/csv", use_container_width=True)
-        uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+        st.download_button("Download CSV Template", template_df.to_csv(index=False).encode('utf-8'), "import_template.csv", "text/csv", use_container_width=True)
+        
+        uploaded_file = st.file_uploader("Upload your completed CSV Template", type="csv", key="csv_uploader")
+        
         if uploaded_file is not None:
             try:
                 new_data_df = pd.read_csv(uploaded_file)
-                if not all(col in new_data_df.columns for col in ALL_COLUMNS):
-                    st.error(f"The uploaded CSV is missing or has incorrect columns. Please use the template provided.")
+                if new_data_df.empty:
+                    st.warning("The uploaded CSV file is empty.")
                 else:
-                    new_data_df = new_data_df[ALL_COLUMNS].astype(str).fillna("")
-                    combined_df = pd.concat([st.session_state.email_data, new_data_df], ignore_index=True)
-                    combined_df.drop_duplicates(subset=['emailAccount'], keep='last', inplace=True)
-                    save_data(combined_df)
-                    st.session_state.email_data = combined_df
-                    st.success(f"✅ Successfully imported and merged data! {len(new_data_df)} rows were processed."); st.rerun()
+                    required_cols = set(ALL_COLUMNS)
+                    uploaded_cols = set(new_data_df.columns)
+                    if not required_cols.issubset(uploaded_cols):
+                        missing_cols = required_cols - uploaded_cols
+                        st.error(f"Upload Failed: Your CSV is missing required columns: {', '.join(missing_cols)}")
+                    else:
+                        st.info("File validated. Merging data with the database...")
+                        new_data_df = new_data_df[ALL_COLUMNS].astype(str).fillna("")
+                        combined_df = pd.concat([st.session_state.email_data, new_data_df], ignore_index=True)
+                        combined_df.drop_duplicates(subset=['emailAccount'], keep='last', inplace=True)
+                        
+                        try:
+                            save_data(combined_df)
+                            st.success(f"✅ Success! Merged {len(new_data_df)} rows. Dashboard will now refresh.")
+                            del st.session_state.email_data # Force a fresh read from database
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Save Failed: Could not write data to the database. Error: {e}")
+
+            except pd.errors.EmptyDataError:
+                st.warning("The uploaded CSV file appears to be empty or corrupted.")
             except Exception as e:
                 st.error(f"An error occurred while processing the file: {e}")
 
