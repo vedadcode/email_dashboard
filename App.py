@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from gspread_dataframe import get_as_dataframe, set_with_dataframe
+# The gspread-dataframe library is no longer used for loading
 from google.oauth2.service_account import Credentials
 import gspread
 import streamlit.components.v1 as components
@@ -78,7 +78,7 @@ def connect_to_gsheet():
         spreadsheet = gc.open_by_key("1snHjynQb3ecyXMgbP4d7WrhAtPoJpzNNC7moZTEW6FM")
         return spreadsheet.sheet1
     except gspread.exceptions.APIError:
-        st.error("API Error: Could not access the spreadsheet. Ensure the 'Google Sheets API' & 'Google Drive API' are enabled and the sheet is shared with your service account email as 'Editor'.")
+        st.error("API Error: Could not access the spreadsheet. Ensure 'Google Sheets API' & 'Google Drive API' are enabled and the sheet is shared with your service account email as 'Editor'.")
         st.stop()
     except Exception as e:
         st.error(f"An unexpected connection error occurred: {e}")
@@ -86,12 +86,32 @@ def connect_to_gsheet():
 
 # --- Backend Functions ---
 ALL_COLUMNS = ["companyName", "emailAccount", "password", "accountHolder", "remarks", "subscriptionPlatform", "purchaseDate", "expiryDate", "mailType", "status"]
+
 def load_data(worksheet):
-    df = get_as_dataframe(worksheet, evaluate_formulas=False, header=1).astype(str).dropna(how='all')
-    for col in ALL_COLUMNS:
-        if col not in df.columns: df[col] = ""
-    return df[ALL_COLUMNS].fillna("").replace(['nan', 'None', '<NA>'], '')
+    """Loads data using the core gspread library for maximum reliability."""
+    try:
+        all_values = worksheet.get_all_values()
+        if not all_values:
+            return pd.DataFrame(columns=ALL_COLUMNS)
+        
+        header = all_values[0]
+        data = all_values[1:]
+        
+        df = pd.DataFrame(data, columns=header)
+        
+        # Standardize the dataframe
+        for col in ALL_COLUMNS:
+            if col not in df.columns:
+                df[col] = ""
+        df = df[ALL_COLUMNS].astype(str).fillna("")
+        df.replace(['nan', 'None', '<NA>'], '', inplace=True)
+        return df
+    except Exception as e:
+        st.error(f"Failed to read data from the sheet. It might be empty or formatted incorrectly. Error: {e}")
+        return pd.DataFrame(columns=ALL_COLUMNS)
+
 def save_data(worksheet, df):
+    """Saves the DataFrame to Google Sheets in batches to avoid API rate limits."""
     with st.spinner(f"Saving {len(df)} rows to the database..."):
         worksheet.clear(); time.sleep(1)
         values_to_save = [df.columns.values.tolist()] + df.astype(str).values.tolist()
@@ -99,6 +119,7 @@ def save_data(worksheet, df):
         for i in range(0, len(values_to_save), batch_size):
             batch = values_to_save[i:i + batch_size]
             worksheet.update(batch, f'A{i+1}'); time.sleep(1.5)
+
 # --- Other Constants and Functions ---
 COMPANY_OPTIONS = ["", "Rewardoo Private Limited", "Eseries Sports Private Limited", "Heksa Skills Private Limited", "Softscience Tech Private Limited"]
 PLATFORM_OPTIONS = ["", "Hostinger", "GoDaddy", "Google Console (Workspace)", "Zoho Mail", "Microsoft 365 (Exchange)"]
@@ -114,43 +135,15 @@ def calculate_metrics(df):
     expiring = df[(exp_dates.notna()) & (exp_dates >= today) & (exp_dates <= today + timedelta(days=30))].shape[0]
     return total, active, expiring
 def get_status_chart(df):
-    if df.empty or df['status'].nunique() == 0:
+    if df.empty or df['status'].str.strip().eq('').all():
         return alt.Chart(pd.DataFrame({'status': ['No Data'], 'count': [1]})).mark_arc(color='#444').properties(title="No status data")
-    status_counts = df['status'].value_counts().reset_index()
+    status_counts = df[df['status'].str.strip() != '']['status'].value_counts().reset_index()
     chart = alt.Chart(status_counts).mark_arc(innerRadius=60, outerRadius=100).encode(
         theta=alt.Theta(field="count", type="quantitative"),
         color=alt.Color(field="status", type="nominal", scale=alt.Scale(domain=['Active', 'Inactive', 'On Hold', 'Closed'], range=['#23D5AB', '#F93154', '#FFC107', '#808B96']), legend=None),
         tooltip=['status', 'count']
     ).properties(width=300, height=300)
     return chart
-
-# --- NEW: Refactored CSV Import Logic into a Callback Function ---
-def process_csv_upload(worksheet):
-    if 'csv_uploader' in st.session_state and st.session_state.csv_uploader is not None:
-        uploaded_file = st.session_state.csv_uploader
-        try:
-            new_data_df = pd.read_csv(uploaded_file)
-            if new_data_df.empty:
-                st.warning("The uploaded CSV file is empty.")
-                return
-            
-            if not set(ALL_COLUMNS).issubset(new_data_df.columns):
-                missing_cols = set(ALL_COLUMNS) - set(new_data_df.columns)
-                st.error(f"Upload Failed: CSV is missing columns: {', '.join(missing_cols)}")
-                return
-
-            new_data_df = new_data_df[ALL_COLUMNS].astype(str).fillna("")
-            combined_df = pd.concat([st.session_state.email_data, new_data_df], ignore_index=True)
-            combined_df.drop_duplicates(subset=['emailAccount'], keep='last', inplace=True)
-            
-            save_data(worksheet, combined_df)
-            st.success(f"✅ Success! Merged {len(new_data_df)} rows. Dashboard has been updated.")
-            # Clear data from state to force a fresh read from the database on the next run
-            if 'email_data' in st.session_state:
-                del st.session_state.email_data
-
-        except Exception as e:
-            st.error(f"An error occurred while processing the file: {e}")
 
 # --- App Pages ---
 def show_login_page():
@@ -214,7 +207,25 @@ def show_main_app(worksheet):
         st.info("Download the template, fill it out, and upload the file. If an email in your CSV already exists, its entry will be updated.")
         template_df = pd.DataFrame(columns=ALL_COLUMNS)
         st.download_button("Download CSV Template", template_df.to_csv(index=False).encode('utf-8'), "import_template.csv", "text/csv", use_container_width=True)
-        st.file_uploader("Upload your completed CSV Template", type="csv", key="csv_uploader", on_change=process_csv_upload, args=(worksheet,))
+        def process_csv_upload():
+            if 'csv_uploader' in st.session_state and st.session_state.csv_uploader is not None:
+                uploaded_file = st.session_state.csv_uploader
+                with st.spinner('Processing file...'):
+                    try:
+                        new_data_df = pd.read_csv(uploaded_file)
+                        if new_data_df.empty:
+                            st.warning("The uploaded CSV file is empty."); return
+                        if not set(ALL_COLUMNS).issubset(new_data_df.columns):
+                            missing_cols = set(ALL_COLUMNS) - set(new_data_df.columns)
+                            st.error(f"Upload Failed: CSV is missing columns: {', '.join(missing_cols)}"); return
+                        new_data_df = new_data_df[ALL_COLUMNS].astype(str).fillna("")
+                        combined_df = pd.concat([st.session_state.email_data, new_data_df], ignore_index=True)
+                        combined_df.drop_duplicates(subset=['emailAccount'], keep='last', inplace=True)
+                        save_data(worksheet, combined_df)
+                        if 'email_data' in st.session_state: del st.session_state.email_data
+                    except Exception as e:
+                        st.error(f"An error occurred during import: {e}")
+        st.file_uploader("Upload your completed CSV Template", type="csv", key="csv_uploader", on_change=process_csv_upload)
 
     st.markdown("<h3 class='glass-card'><i class='bi bi-table'></i> Email Account Records</h3>", unsafe_allow_html=True)
     selected_company = st.selectbox("Filter by Company", options=["Show All Companies"] + st.session_state.email_data["companyName"].dropna().unique().tolist())
