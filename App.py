@@ -119,12 +119,21 @@ SCOPE = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis
 creds_dict = st.secrets["gcp_service_account"]
 creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
 gc = gspread.authorize(creds)
-SPREADSHEET_NAME = "Email Dashboard Data"
+
+# --- FIXED: Connecting to Google Sheets by unique ID ---
+SPREADSHEET_ID = "1xPZCI_vHs4XrR-vf63g0UlVfGhImilzV4ad5mAr4OTo" 
 try:
-    spreadsheet = gc.open(SPREADSHEET_NAME)
+    spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     worksheet = spreadsheet.sheet1
-except gspread.exceptions.SpreadsheetNotFound:
-    st.error(f"Spreadsheet '{SPREADSHEET_NAME}' not found. Please check the name and that you've shared it with the service account email.")
+except gspread.exceptions.APIError as e:
+    st.error(
+        "API Error: Could not access the spreadsheet by its ID. "
+        "This confirms the problem is with your Google account permissions. "
+        "Please very carefully re-check two things: (1) The 'Google Sheets API' is enabled in your Google Cloud project, and (2) Your sheet is shared with your service account email address as an 'Editor'."
+    )
+    st.stop()
+except Exception as e:
+    st.error(f"An unexpected error occurred: {e}")
     st.stop()
     
 ALL_COLUMNS = ["companyName", "emailAccount", "password", "accountHolder", "remarks", "subscriptionPlatform", "purchaseDate", "expiryDate", "mailType", "status"]
@@ -139,12 +148,15 @@ def load_data():
     return df
 
 def save_data(df):
-    set_with_dataframe(worksheet, df.astype(str))
+    """Saves the entire DataFrame back to the Google Sheet efficiently."""
+    df_to_save = df.astype(str)
+    values_to_save = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
+    worksheet.clear()
+    worksheet.update(values_to_save, 'A1')
 
 COMPANY_OPTIONS = ["", "Rewardoo Private Limited", "Eseries Sports Private Limited", "Heksa Skills Private Limited", "Softscience Tech Private Limited"]
 PLATFORM_OPTIONS = ["", "Hostinger", "GoDaddy", "Google Console (Workspace)", "Zoho Mail", "Microsoft 365 (Exchange)"]
 MAIL_TYPE_OPTIONS = ["", "Gmail Regular", "Gmail Paid (Workspace)", "Hostinger Webmail", "GoDaddy Webmail", "Zoho Standard", "Microsoft Exchange"]
-# --- MODIFIED: Added 'Closed' to the status options ---
 STATUS_OPTIONS = ["Active", "Inactive", "On Hold", "Closed"]
 COLUMN_CONFIG = { "companyName": st.column_config.SelectboxColumn("Company", options=COMPANY_OPTIONS[1:], required=True), "emailAccount": st.column_config.TextColumn("Email", required=True), "accountHolder": st.column_config.TextColumn("Account Holder", required=True), "subscriptionPlatform": st.column_config.SelectboxColumn("Platform", options=PLATFORM_OPTIONS[1:], required=True), "purchaseDate": st.column_config.DateColumn("Purchase Date", format="YYYY-MM-DD", required=True), "expiryDate": st.column_config.DateColumn("Expiry Date", format="YYYY-MM-DD", required=True), "mailType": st.column_config.SelectboxColumn("Mail Type", options=MAIL_TYPE_OPTIONS[1:], required=True), "status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS, default="Active", required=True), "remarks": st.column_config.TextColumn("Remarks"),}
 
@@ -165,7 +177,6 @@ def get_status_chart(df):
     status_counts.columns = ['status', 'count']
     chart = alt.Chart(status_counts).mark_arc(innerRadius=60, outerRadius=100).encode(
         theta=alt.Theta(field="count", type="quantitative"),
-        # --- MODIFIED: Added 'Closed' and a new color to the chart ---
         color=alt.Color(field="status", type="nominal",
                         scale=alt.Scale(domain=['Active', 'Inactive', 'On Hold', 'Closed'], range=['#23D5AB', '#F93154', '#FFC107', '#808B96']),
                         legend=None),
@@ -262,7 +273,7 @@ def show_main_app():
         df_for_editor['purchaseDate'] = pd.to_datetime(df_for_editor['purchaseDate'], errors='coerce')
         df_for_editor['expiryDate'] = pd.to_datetime(df_for_editor['expiryDate'], errors='coerce')
         edited_df = st.data_editor(df_for_editor.drop(columns=['password'], errors='ignore'), column_config=COLUMN_CONFIG, num_rows="dynamic", use_container_width=True, key="data_editor", hide_index=True)
-        
+
     st.markdown("<h3 class='glass-card'><i class='bi bi-pie-chart-fill'></i> Account Status & Export</h3>", unsafe_allow_html=True)
     cols = st.columns([0.6, 0.4])
     with cols[0]: st.altair_chart(get_status_chart(st.session_state.email_data), use_container_width=True)
