@@ -14,28 +14,10 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- NEW: Secret Validator ---
-def check_secrets():
-    """Checks if the secrets are correctly formatted before trying to use them."""
-    st.info("Verifying application secrets...")
-    if "gcp_service_account" in st.secrets:
-        required_keys = ["type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "client_x509_cert_url"]
-        missing_keys = [key for key in required_keys if key not in st.secrets["gcp_service_account"]]
-        if not missing_keys:
-            st.success("✅ Secrets appear to be correctly formatted! Attempting to connect to Google Sheets...")
-            return True
-        else:
-            st.error(f"ERROR: Your `gcp_service_account` secret is MISSING the following keys: `{', '.join(missing_keys)}`. Please check your Streamlit Secrets formatting and ensure all values from the JSON file were copied correctly.")
-            st.stop()
-    else:
-        st.error("FATAL ERROR: The required `gcp_service_account` secret was not found. Please ensure it is correctly set in your app's settings on Streamlit Cloud.")
-        st.stop()
-    return False
-
-
 # --- UI/CSS Styling ---
 def load_css():
-    css_to_inject = """
+    st.markdown("""
+    <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     @import url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css");
 
@@ -130,31 +112,30 @@ def load_css():
     div[data-testid="stMetric"] div[data-testid="stMetricValue"] { font-size: 2.5em; font-weight: 700; color: var(--text-color-primary) !important; }
     
     .stDataFrame .data-grid-header { background-color: transparent !important; color: var(--primary-accent-color); font-weight: 600; font-size: 1.1em; }
-    """
-    st.markdown(f'<style>{css_to_inject}</style>', unsafe_allow_html=True)
+    </style>
+    """, unsafe_allow_html=True)
 
-# Main script execution starts here
-check_secrets()
+# --- NEW: Connection Manager ---
+@st.cache_resource
+def connect_to_gsheet():
+    """Connects to Google Sheets and returns the worksheet object, cached for the session."""
+    try:
+        creds_dict = st.secrets["gcp_service_account"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
+        gc = gspread.authorize(creds)
+        spreadsheet = gc.open_by_key("1snHjynQb3ecyXMgbP4d7WrhAtPoJpzNNC7moZTEW6FM")
+        return spreadsheet.sheet1
+    except gspread.exceptions.APIError:
+        st.error("API Error: Could not access the spreadsheet. This indicates a permission issue with your Google account. Please ensure the 'Google Sheets API' and 'Google Drive API' are enabled, and your sheet is shared with the service account email as 'Editor'.")
+        st.stop()
+    except Exception as e:
+        st.error(f"An unexpected connection error occurred: {e}")
+        st.stop()
 
-# --- Backend Functions and Constants ---
-SCOPE = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-creds_dict = st.secrets["gcp_service_account"]
-creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
-gc = gspread.authorize(creds)
-SPREADSHEET_ID = "1snHjynQb3ecyXMgbP4d7WrhAtPoJpzNNC7moZTEW6FM" 
-try:
-    spreadsheet = gc.open_by_key(SPREADSHEET_ID)
-    worksheet = spreadsheet.sheet1
-except gspread.exceptions.APIError as e:
-    st.error("API Error: Could not access the spreadsheet by its ID. This confirms the problem is with your Google account permissions. Please very carefully re-check two things: (1) The 'Google Sheets API' is enabled in your Google Cloud project, and (2) Your sheet is shared with your service account email address as an 'Editor'.")
-    st.stop()
-except Exception as e:
-    st.error(f"An unexpected error occurred during sheet connection: {e}")
-    st.stop()
-    
+# --- Backend Functions ---
 ALL_COLUMNS = ["companyName", "emailAccount", "password", "accountHolder", "remarks", "subscriptionPlatform", "purchaseDate", "expiryDate", "mailType", "status"]
 
-def load_data():
+def load_data(worksheet):
     df = get_as_dataframe(worksheet, evaluate_formulas=False, header=1).astype(str)
     df.dropna(how='all', inplace=True)
     for col in ALL_COLUMNS:
@@ -163,18 +144,18 @@ def load_data():
     df.replace(['nan', 'None', '<NA>'], '', inplace=True)
     return df
 
-def save_data(df):
+def save_data(worksheet, df):
     df_to_save = df.astype(str)
     values_to_save = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
     worksheet.clear()
     worksheet.update(values_to_save, 'A1')
 
+# --- Other Constants and Functions (unchanged) ---
 COMPANY_OPTIONS = ["", "Rewardoo Private Limited", "Eseries Sports Private Limited", "Heksa Skills Private Limited", "Softscience Tech Private Limited"]
 PLATFORM_OPTIONS = ["", "Hostinger", "GoDaddy", "Google Console (Workspace)", "Zoho Mail", "Microsoft 365 (Exchange)"]
 MAIL_TYPE_OPTIONS = ["", "Gmail Regular", "Gmail Paid (Workspace)", "Hostinger Webmail", "GoDaddy Webmail", "Zoho Standard", "Microsoft Exchange"]
 STATUS_OPTIONS = ["Active", "Inactive", "On Hold", "Closed"]
 COLUMN_CONFIG = { "companyName": st.column_config.SelectboxColumn("Company", options=COMPANY_OPTIONS[1:], required=True), "emailAccount": st.column_config.TextColumn("Email", required=True), "accountHolder": st.column_config.TextColumn("Account Holder", required=True), "subscriptionPlatform": st.column_config.SelectboxColumn("Platform", options=PLATFORM_OPTIONS[1:], required=True), "purchaseDate": st.column_config.DateColumn("Purchase Date", format="YYYY-MM-DD", required=True), "expiryDate": st.column_config.DateColumn("Expiry Date", format="YYYY-MM-DD", required=True), "mailType": st.column_config.SelectboxColumn("Mail Type", options=MAIL_TYPE_OPTIONS[1:], required=True), "status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS, default="Active", required=True), "remarks": st.column_config.TextColumn("Remarks"),}
-
 def calculate_metrics(df):
     if df.empty: return 0, 0, 0
     total_accounts = len(df)
@@ -184,7 +165,6 @@ def calculate_metrics(df):
     exp_dates = pd.to_datetime(df['expiryDate'], errors='coerce')
     expiring_soon = df[(exp_dates.notna()) & (exp_dates >= today) & (exp_dates <= thirty_days_from_now)].shape[0]
     return total_accounts, active_accounts, expiring_soon
-
 def get_status_chart(df):
     if df.empty or df['status'].nunique() == 0:
         return alt.Chart(pd.DataFrame({'status': ['No Data'], 'count': [1]})).mark_arc().encode(color=alt.value('#444')).properties(title="No status data available")
@@ -192,13 +172,12 @@ def get_status_chart(df):
     status_counts.columns = ['status', 'count']
     chart = alt.Chart(status_counts).mark_arc(innerRadius=60, outerRadius=100).encode(
         theta=alt.Theta(field="count", type="quantitative"),
-        color=alt.Color(field="status", type="nominal",
-                        scale=alt.Scale(domain=['Active', 'Inactive', 'On Hold', 'Closed'], range=['#23D5AB', '#F93154', '#FFC107', '#808B96']),
-                        legend=None),
+        color=alt.Color(field="status", type="nominal", scale=alt.Scale(domain=['Active', 'Inactive', 'On Hold', 'Closed'], range=['#23D5AB', '#F93154', '#FFC107', '#808B96']), legend=None),
         tooltip=['status', 'count']
     ).properties(width=300, height=300)
     return chart
 
+# --- App Pages ---
 def show_login_page():
     st.title("🔐 Company Email Dashboard")
     cols = st.columns([1, 1.5, 1])
@@ -215,7 +194,7 @@ def show_login_page():
                     st.error("Incorrect username or password")
         st.markdown("</div>", unsafe_allow_html=True)
 
-def show_main_app():
+def show_main_app(worksheet):
     with st.sidebar:
         st.success(f"Logged in as **{st.secrets['app_credentials']['username']}**")
         def theme_changed():
@@ -233,7 +212,7 @@ def show_main_app():
     st.title("Company Email Dashboard")
 
     if 'email_data' not in st.session_state:
-        st.session_state.email_data = load_data()
+        st.session_state.email_data = load_data(worksheet)
 
     st.markdown("<h3 class='glass-card'><i class='bi bi-bar-chart-line-fill'></i> At a Glance</h3>", unsafe_allow_html=True)
     total, active, expiring = calculate_metrics(st.session_state.email_data)
@@ -253,11 +232,11 @@ def show_main_app():
                 else:
                     new_row = pd.DataFrame([{"companyName": companyName, "emailAccount": emailAccount, "password": password, "accountHolder": accountHolder, "remarks": remarks, "subscriptionPlatform": subscriptionPlatform, "purchaseDate": str(purchaseDate), "expiryDate": str(expiryDate), "mailType": mailType, "status": status}])
                     st.session_state.email_data = pd.concat([st.session_state.email_data, new_row], ignore_index=True)
-                    save_data(st.session_state.email_data)
+                    save_data(worksheet, st.session_state.email_data)
                     st.success("✅ Entry added successfully!"); st.rerun()
     
     with st.expander("Bulk Import from CSV File", icon="📁"):
-        st.info("Download the template, fill it out, and upload it here. If an email in your CSV already exists, its entry will be updated.")
+        st.info("Download the template, fill it out, and upload the file. If an email in your CSV already exists, its entry will be updated.")
         template_df = pd.DataFrame(columns=ALL_COLUMNS)
         st.download_button("Download CSV Template", template_df.to_csv(index=False).encode('utf-8'), "import_template.csv", "text/csv", use_container_width=True)
         uploaded_file = st.file_uploader("Upload your completed CSV Template", type="csv", key="csv_uploader")
@@ -268,23 +247,16 @@ def show_main_app():
                     st.warning("The uploaded CSV file is empty.")
                 else:
                     required_cols = set(ALL_COLUMNS)
-                    uploaded_cols = set(new_data_df.columns)
-                    if not required_cols.issubset(uploaded_cols):
-                        missing_cols = required_cols - uploaded_cols
+                    if not required_cols.issubset(new_data_df.columns):
+                        missing_cols = required_cols - set(new_data_df.columns)
                         st.error(f"Upload Failed: Your CSV is missing required columns: {', '.join(missing_cols)}")
                     else:
                         st.info("File validated. Merging data with the database...")
                         new_data_df = new_data_df[ALL_COLUMNS].astype(str).fillna("")
                         combined_df = pd.concat([st.session_state.email_data, new_data_df], ignore_index=True)
                         combined_df.drop_duplicates(subset=['emailAccount'], keep='last', inplace=True)
-                        
-                        try:
-                            save_data(combined_df)
-                            st.success(f"✅ Success! Merged {len(new_data_df)} rows. Dashboard will now refresh.")
-                            del st.session_state.email_data
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Save Failed: Could not write data to the database. Error: {e}")
+                        save_data(worksheet, combined_df)
+                        st.success(f"✅ Success! Merged {len(new_data_df)} rows. Dashboard is refreshing."); st.rerun()
             except pd.errors.EmptyDataError:
                 st.warning("The uploaded CSV file appears to be empty or corrupted.")
             except Exception as e:
@@ -293,9 +265,8 @@ def show_main_app():
     st.markdown("<h3 class='glass-card'><i class='bi bi-table'></i> Email Account Records</h3>", unsafe_allow_html=True)
     selected_company = st.selectbox("Filter by Company", options=["Show All Companies"] + st.session_state.email_data["companyName"].dropna().unique().tolist())
     display_df = st.session_state.email_data[st.session_state.email_data["companyName"] == selected_company].copy() if selected_company != "Show All Companies" else st.session_state.email_data.copy()
-
     if display_df.empty:
-        st.info("No data to display for the current selection. Add an entry or import a CSV to get started!")
+        st.info("No data to display. Add an entry or import a CSV to get started!")
     else:
         df_for_editor = display_df.copy()
         df_for_editor['purchaseDate'] = pd.to_datetime(df_for_editor['purchaseDate'], errors='coerce')
@@ -313,10 +284,9 @@ def show_main_app():
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'theme' not in st.session_state: st.session_state.theme = "dark"
 
-# check_secrets() is called first
-if check_secrets():
-    load_css()
-    if st.session_state.logged_in:
-        show_main_app()
-    else:
-        show_login_page()
+load_css()
+if st.session_state.logged_in:
+    worksheet = connect_to_gsheet()
+    show_main_app(worksheet)
+else:
+    show_login_page()
