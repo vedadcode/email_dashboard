@@ -6,6 +6,7 @@ import gspread
 import streamlit.components.v1 as components
 from datetime import datetime, timedelta
 import altair as alt
+import time 
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -115,7 +116,7 @@ def load_css():
     </style>
     """, unsafe_allow_html=True)
 
-# --- NEW: Connection Manager ---
+# --- Connection Manager ---
 @st.cache_resource
 def connect_to_gsheet():
     """Connects to Google Sheets and returns the worksheet object, cached for the session."""
@@ -145,12 +146,35 @@ def load_data(worksheet):
     return df
 
 def save_data(worksheet, df):
+    """Saves the entire DataFrame back to the Google Sheet efficiently with batching."""
+    st.info(f"Preparing to save {len(df)} rows. This may take a moment...")
+    
+    worksheet.clear()
+    time.sleep(1) 
+
     df_to_save = df.astype(str)
     values_to_save = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
-    worksheet.clear()
-    worksheet.update(values_to_save, 'A1')
+    
+    batch_size = 500
+    total_rows = len(values_to_save)
+    
+    progress_bar = st.progress(0, text="Saving data...")
+    
+    for i in range(0, total_rows, batch_size):
+        batch = values_to_save[i:i + batch_size]
+        start_row = i + 1
+        
+        worksheet.update(batch, f'A{start_row}')
+        
+        progress_percentage = min((i + batch_size) / total_rows, 1.0)
+        progress_bar.progress(progress_percentage, text=f"Saving rows {start_row} to {min(start_row + batch_size - 1, total_rows)}...")
+        
+        time.sleep(1.5) 
+    
+    progress_bar.empty()
 
-# --- Other Constants and Functions (unchanged) ---
+
+# --- Other Constants and Functions ---
 COMPANY_OPTIONS = ["", "Rewardoo Private Limited", "Eseries Sports Private Limited", "Heksa Skills Private Limited", "Softscience Tech Private Limited"]
 PLATFORM_OPTIONS = ["", "Hostinger", "GoDaddy", "Google Console (Workspace)", "Zoho Mail", "Microsoft 365 (Exchange)"]
 MAIL_TYPE_OPTIONS = ["", "Gmail Regular", "Gmail Paid (Workspace)", "Hostinger Webmail", "GoDaddy Webmail", "Zoho Standard", "Microsoft Exchange"]
@@ -241,30 +265,33 @@ def show_main_app(worksheet):
         st.download_button("Download CSV Template", template_df.to_csv(index=False).encode('utf-8'), "import_template.csv", "text/csv", use_container_width=True)
         uploaded_file = st.file_uploader("Upload your completed CSV Template", type="csv", key="csv_uploader")
         if uploaded_file is not None:
-            try:
-                new_data_df = pd.read_csv(uploaded_file)
-                if new_data_df.empty:
-                    st.warning("The uploaded CSV file is empty.")
-                else:
-                    required_cols = set(ALL_COLUMNS)
-                    if not required_cols.issubset(new_data_df.columns):
-                        missing_cols = required_cols - set(new_data_df.columns)
-                        st.error(f"Upload Failed: Your CSV is missing required columns: {', '.join(missing_cols)}")
+            with st.spinner('Processing file... This may take a moment for large files.'):
+                try:
+                    new_data_df = pd.read_csv(uploaded_file)
+                    if new_data_df.empty:
+                        st.warning("The uploaded CSV file is empty.")
                     else:
-                        st.info("File validated. Merging data with the database...")
-                        new_data_df = new_data_df[ALL_COLUMNS].astype(str).fillna("")
-                        combined_df = pd.concat([st.session_state.email_data, new_data_df], ignore_index=True)
-                        combined_df.drop_duplicates(subset=['emailAccount'], keep='last', inplace=True)
-                        save_data(worksheet, combined_df)
-                        st.success(f"✅ Success! Merged {len(new_data_df)} rows. Dashboard is refreshing."); st.rerun()
-            except pd.errors.EmptyDataError:
-                st.warning("The uploaded CSV file appears to be empty or corrupted.")
-            except Exception as e:
-                st.error(f"An error occurred while processing the file: {e}")
+                        required_cols = set(ALL_COLUMNS)
+                        if not required_cols.issubset(new_data_df.columns):
+                            missing_cols = required_cols - set(new_data_df.columns)
+                            st.error(f"Upload Failed: Your CSV is missing required columns: {', '.join(missing_cols)}")
+                        else:
+                            st.info("File validated. Merging and saving data...")
+                            new_data_df = new_data_df[ALL_COLUMNS].astype(str).fillna("")
+                            combined_df = pd.concat([st.session_state.email_data, new_data_df], ignore_index=True)
+                            combined_df.drop_duplicates(subset=['emailAccount'], keep='last', inplace=True)
+                            
+                            save_data(worksheet, combined_df)
+
+                            del st.session_state.email_data
+                            st.rerun()
+                except Exception as e:
+                    st.error(f"An error occurred while processing the file: {e}")
 
     st.markdown("<h3 class='glass-card'><i class='bi bi-table'></i> Email Account Records</h3>", unsafe_allow_html=True)
     selected_company = st.selectbox("Filter by Company", options=["Show All Companies"] + st.session_state.email_data["companyName"].dropna().unique().tolist())
     display_df = st.session_state.email_data[st.session_state.email_data["companyName"] == selected_company].copy() if selected_company != "Show All Companies" else st.session_state.email_data.copy()
+
     if display_df.empty:
         st.info("No data to display. Add an entry or import a CSV to get started!")
     else:
@@ -284,6 +311,7 @@ def show_main_app(worksheet):
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'theme' not in st.session_state: st.session_state.theme = "dark"
 
+# check_secrets() is implicitly run by Streamlit when accessing st.secrets
 load_css()
 if st.session_state.logged_in:
     worksheet = connect_to_gsheet()
