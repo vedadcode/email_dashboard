@@ -14,6 +14,25 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
+# --- NEW: Secret Validator ---
+def check_secrets():
+    """Checks if the secrets are correctly formatted before trying to use them."""
+    st.info("Verifying application secrets...")
+    if "gcp_service_account" in st.secrets:
+        required_keys = ["type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "client_x509_cert_url"]
+        missing_keys = [key for key in required_keys if key not in st.secrets["gcp_service_account"]]
+        if not missing_keys:
+            st.success("✅ Secrets appear to be correctly formatted! Attempting to connect to Google Sheets...")
+            return True
+        else:
+            st.error(f"ERROR: Your `gcp_service_account` secret is MISSING the following keys: `{', '.join(missing_keys)}`. Please check your Streamlit Secrets formatting and ensure all values from the JSON file were copied correctly.")
+            st.stop()
+    else:
+        st.error("FATAL ERROR: The required `gcp_service_account` secret was not found. Please ensure it is correctly set in your app's settings on Streamlit Cloud.")
+        st.stop()
+    return False
+
+
 # --- UI/CSS Styling ---
 def load_css():
     css_to_inject = """
@@ -114,6 +133,9 @@ def load_css():
     """
     st.markdown(f'<style>{css_to_inject}</style>', unsafe_allow_html=True)
 
+# Main script execution starts here
+check_secrets()
+
 # --- Backend Functions and Constants ---
 SCOPE = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 creds_dict = st.secrets["gcp_service_account"]
@@ -124,10 +146,10 @@ try:
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     worksheet = spreadsheet.sheet1
 except gspread.exceptions.APIError as e:
-    st.error("API Error: Could not access the spreadsheet. Please ensure the 'Google Sheets API' & 'Google Drive API' are enabled and the sheet is shared with your service account email as 'Editor'.")
+    st.error("API Error: Could not access the spreadsheet by its ID. This confirms the problem is with your Google account permissions. Please very carefully re-check two things: (1) The 'Google Sheets API' is enabled in your Google Cloud project, and (2) Your sheet is shared with your service account email address as an 'Editor'.")
     st.stop()
 except Exception as e:
-    st.error(f"An unexpected error occurred: {e}")
+    st.error(f"An unexpected error occurred during sheet connection: {e}")
     st.stop()
     
 ALL_COLUMNS = ["companyName", "emailAccount", "password", "accountHolder", "remarks", "subscriptionPlatform", "purchaseDate", "expiryDate", "mailType", "status"]
@@ -170,7 +192,9 @@ def get_status_chart(df):
     status_counts.columns = ['status', 'count']
     chart = alt.Chart(status_counts).mark_arc(innerRadius=60, outerRadius=100).encode(
         theta=alt.Theta(field="count", type="quantitative"),
-        color=alt.Color(field="status", type="nominal", scale=alt.Scale(domain=['Active', 'Inactive', 'On Hold', 'Closed'], range=['#23D5AB', '#F93154', '#FFC107', '#808B96']), legend=None),
+        color=alt.Color(field="status", type="nominal",
+                        scale=alt.Scale(domain=['Active', 'Inactive', 'On Hold', 'Closed'], range=['#23D5AB', '#F93154', '#FFC107', '#808B96']),
+                        legend=None),
         tooltip=['status', 'count']
     ).properties(width=300, height=300)
     return chart
@@ -232,14 +256,11 @@ def show_main_app():
                     save_data(st.session_state.email_data)
                     st.success("✅ Entry added successfully!"); st.rerun()
     
-    # --- DOUBLE-CHECKED & IMPROVED CSV IMPORT LOGIC ---
     with st.expander("Bulk Import from CSV File", icon="📁"):
-        st.info("Download the template, fill it out, and upload the file. If an email in your CSV already exists, its entry will be updated.")
+        st.info("Download the template, fill it out, and upload it here. If an email in your CSV already exists, its entry will be updated.")
         template_df = pd.DataFrame(columns=ALL_COLUMNS)
         st.download_button("Download CSV Template", template_df.to_csv(index=False).encode('utf-8'), "import_template.csv", "text/csv", use_container_width=True)
-        
         uploaded_file = st.file_uploader("Upload your completed CSV Template", type="csv", key="csv_uploader")
-        
         if uploaded_file is not None:
             try:
                 new_data_df = pd.read_csv(uploaded_file)
@@ -260,11 +281,10 @@ def show_main_app():
                         try:
                             save_data(combined_df)
                             st.success(f"✅ Success! Merged {len(new_data_df)} rows. Dashboard will now refresh.")
-                            del st.session_state.email_data # Force a fresh read from database
+                            del st.session_state.email_data
                             st.rerun()
                         except Exception as e:
                             st.error(f"Save Failed: Could not write data to the database. Error: {e}")
-
             except pd.errors.EmptyDataError:
                 st.warning("The uploaded CSV file appears to be empty or corrupted.")
             except Exception as e:
@@ -293,8 +313,10 @@ def show_main_app():
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'theme' not in st.session_state: st.session_state.theme = "dark"
 
-load_css()
-if st.session_state.logged_in:
-    show_main_app()
-else:
-    show_login_page()
+# check_secrets() is called first
+if check_secrets():
+    load_css()
+    if st.session_state.logged_in:
+        show_main_app()
+    else:
+        show_login_page()
